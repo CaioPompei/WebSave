@@ -39,6 +39,7 @@ CFG = {
     "frames": None,                                   # native (Android) frame extractor for GIFs
     "trim": None,                                     # native (Android) cutter for a time range
     "on_wifi": None,                                  # native (Android) check for an unmetered network
+    "light": False,                                   # older / low-memory phone: do less at once
 }
 
 
@@ -114,7 +115,7 @@ def base_opts():
         "updatetime": False,
         "cachedir": os.path.join(CFG["data_dir"], "cache"),
         # faster: several pieces in parallel, and big chunks so YouTube doesn't throttle
-        "concurrent_fragment_downloads": 4,
+        "concurrent_fragment_downloads": 2 if CFG["light"] else 4,
         "http_chunk_size": 10 * 1024 * 1024,
         # resilient: retry when the connection drops instead of failing
         "retries": 10, "fragment_retries": 10, "extractor_retries": 3, "socket_timeout": 30,
@@ -309,13 +310,19 @@ GIF_FPS = 12
 GIF_MAX_FRAMES = 200
 
 
+def gif_limits():
+    """Fewer, slower frames on older phones: GIFs build faster and use less memory."""
+    return (10, 120) if CFG["light"] else (GIF_FPS, GIF_MAX_FRAMES)
+
+
 def make_gif(source, target, width, start=None, end=None):
     """Turn a silent clip (or a range of it) into a real animated GIF that plays in any gallery."""
     if source.lower().endswith(".gif") and start is None:
         os.replace(source, target)
         return
     if HAS_FFMPEG:
-        graph = (f"fps={GIF_FPS},scale='min({width},iw)':-2:flags=lanczos,split[a][b];"
+        fps, max_frames = gif_limits()
+        graph = (f"fps={fps},scale='min({width},iw)':-2:flags=lanczos,split[a][b];"
                  "[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4")
         cut = (["-ss", f"{start:.3f}"] if start else []) + (["-t", f"{end - (start or 0):.3f}"] if end else [])
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *cut, "-i", source, "-vf", graph, "-loop", "0", target],
@@ -326,7 +333,7 @@ def make_gif(source, target, width, start=None, end=None):
         start_ms = int((start or 0) * 1000)
         end_ms = int(end * 1000) if end else -1
         w, h, count, delay = (int(x) for x in str(
-            CFG["frames"](source, raw, width, GIF_FPS, GIF_MAX_FRAMES, start_ms, end_ms)).split("|"))
+            CFG["frames"](source, raw, width, *gif_limits(), start_ms, end_ms)).split("|"))
         try:
             encode_gif(raw, w, h, count, delay, target)
         finally:
@@ -465,7 +472,8 @@ def api_config():
         version = "?"
     has_js = bool(CFG["qjs"]) or any(shutil.which(x) for x in ("deno", "node", "bun", "qjs"))
     return {"app": CFG["app"], "cookies": bool(cookies_path()), "ffmpeg": HAS_FFMPEG,
-            "engine": version, "js": has_js, "settings": settings()}, 200
+            "engine": version, "js": has_js, "light": CFG["light"], "parallel": MAX_PARALLEL,
+            "settings": settings()}, 200
 
 
 def api_info(body):
@@ -866,6 +874,13 @@ class Handler(BaseHTTPRequestHandler):
         last = path.rsplit("/", 1)[-1]
         if path == "/":
             self._send(HTML.encode(), "text/html; charset=utf-8")
+        elif path == "/fonts/onest.woff2":
+            self.send_response(200)
+            self.send_header("Content-Type", "font/woff2")
+            self.send_header("Content-Length", str(len(ONEST_WOFF2)))
+            self.send_header("Cache-Control", "max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(ONEST_WOFF2)
         elif path == "/api/ping":
             self._json(({"ok": True}, 200))
         elif path == "/api/config":
@@ -931,8 +946,12 @@ def serve(port):
 
 # ---------------------------------------------------------------- Android
 
-def start(port, data_dir, cache_dir, native_lib_dir=None):
-    """Called by the Android app (Chaquopy)."""
+def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
+    """Called by the Android app (Chaquopy). light=True on older or low-memory phones."""
+    global MAX_PARALLEL, SLOTS
+    if light:
+        MAX_PARALLEL = 1
+        SLOTS = threading.Semaphore(1)
     from java import jclass
     native = jclass("app.websave.Native")
     try:
@@ -941,7 +960,7 @@ def start(port, data_dir, cache_dir, native_lib_dir=None):
     except Exception:
         pass
     qjs = os.path.join(native_lib_dir, "libqjs.so") if native_lib_dir else None
-    CFG.update(app=True, data_dir=data_dir, tmp_dir=cache_dir,
+    CFG.update(app=True, data_dir=data_dir, tmp_dir=cache_dir, light=bool(light),
                qjs=qjs if qjs and os.access(qjs, os.X_OK) else None,
                merge=lambda v, a, out: native.merge(v, a, out),
                save=lambda path, name: native.save(path, name),
@@ -956,6 +975,7 @@ def start(port, data_dir, cache_dir, native_lib_dir=None):
 # ---------------------------------------------------------------- UI
 
 from websave_ui import HTML  # noqa: E402  (kept in its own module so the page is easy to edit)
+from websave_fonts import ONEST_WOFF2  # noqa: E402
 
 
 if __name__ == "__main__":

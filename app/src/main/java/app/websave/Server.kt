@@ -1,5 +1,6 @@
 package app.websave
 
+import android.app.ActivityManager
 import android.content.Context
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -25,10 +26,20 @@ object Server {
             val free = ServerSocket(0).use { it.localPort }
             Python.getInstance().getModule("websave").callAttr(
                 "start", free, app.filesDir.absolutePath, app.cacheDir.absolutePath,
-                app.applicationInfo.nativeLibraryDir
+                app.applicationInfo.nativeLibraryDir, isLightDevice(app)
             )
             port = free
         }
+    }
+
+    /**
+     * Older or low-memory phones (under 3 GB of RAM, or Android Go): the engine runs one
+     * download at a time and makes lighter GIFs so the phone stays responsive.
+     */
+    fun isLightDevice(context: Context): Boolean {
+        val manager = context.getSystemService(ActivityManager::class.java) ?: return false
+        val memory = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }
+        return manager.isLowRamDevice || memory.totalMem < 3_000_000_000L
     }
 
     /** Start if needed and wait until the server answers. Call off the main thread. */

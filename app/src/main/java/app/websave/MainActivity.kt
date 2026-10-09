@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
                     val query = pendingLink?.let { "?url=" + Uri.encode(it) } ?: ""
                     pendingLink = null
                     web.loadUrl(Server.base + query)
+                    web.postDelayed({ suggestWebViewUpdate() }, 2000)
                 } else {
                     web.loadDataWithBaseURL(null, plainScreen("WebSave couldn't start. Close and reopen the app."),
                         "text/html", "utf-8", null)
@@ -97,6 +98,13 @@ class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         // Android only lets an app read the clipboard while it has focus
         if (hasFocus && ready) web.evaluateJavascript("window.onAppFocus && onAppFocus()", null)
+    }
+
+    /** Phones that never updated "Android System WebView" draw the app slowly; suggest the free update. */
+    private fun suggestWebViewUpdate() {
+        val version = WebView.getCurrentWebViewPackage()?.versionName ?: return
+        val major = version.substringBefore('.').toIntOrNull() ?: return
+        if (major < 90) web.evaluateJavascript("window.showWebViewHint && showWebViewHint(${JSONObject.quote(version)})", null)
     }
 
     private fun linkFrom(intent: Intent?): String? =

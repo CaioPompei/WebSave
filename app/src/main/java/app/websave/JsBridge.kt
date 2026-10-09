@@ -67,6 +67,19 @@ class JsBridge(private val activity: Activity) {
         }
     }
 
+    /** Open an app's page in the Play Store (used to update Android System WebView). */
+    @JavascriptInterface
+    fun openStore(packageName: String) = activity.runOnUiThread {
+        try {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")))
+        } catch (_: Exception) {
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=$packageName")))
+            } catch (_: Exception) {}
+        }
+    }
+
     /** Close the quick-save sheet (or send the full app to the background). */
     @JavascriptInterface
     fun close() = activity.runOnUiThread {

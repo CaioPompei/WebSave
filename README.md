@@ -16,6 +16,7 @@ Save videos from YouTube, Instagram, TikTok, X and hundreds of other sites strai
 - **Library** with search and filters (videos, GIFs, audio)
 - **Smart queue**: 2 downloads at a time, automatic retries, optional "only on Wi-Fi"
 - **Self-updating engine**: yt-dlp updates itself once a week
+- Runs on Android 8 and up, 64-bit and 32-bit ARM, with a light mode for phones under 3 GB of RAM
 - Saves to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`)
 
 ## Build

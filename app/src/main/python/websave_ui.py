@@ -13,10 +13,9 @@ HTML = r"""<!doctype html>
 <meta name="theme-color" content="#12161F">
 <meta name="color-scheme" content="dark">
 <title>WebSave</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+/* the font ships inside the app, so the screen never waits on the network */
+@font-face{font-family:"Onest";src:url("/fonts/onest.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 :root{
   --bg:#12161F; --surface:#1B2130; --raised:#232A3B; --line:#2A3245; --line-soft:#262D3E;
   --text:#EEF1F6; --text-2:#B7BFCE; --muted:#8F98AB;
@@ -87,7 +86,7 @@ button{cursor:pointer}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px;align-items:start}
 .card{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;width:100%;text-align:left;border:0;background:none;padding:0;color:inherit}
 .thumb{position:relative;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:var(--raised)}
-.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.thumb img{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover}
 .badge{position:absolute;left:8px;top:8px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;color:var(--on-accent);
   font-variant-numeric:tabular-nums}
 .dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.72);color:#fff;font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:4px;
@@ -132,7 +131,7 @@ button{cursor:pointer}
 /* ---------- video screen ---------- */
 .video-view{padding:0}
 .hero{position:relative;aspect-ratio:16/10;max-height:300px;width:100%;background:var(--raised);overflow:hidden}
-.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero img{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;object-fit:cover}
 .hero .back{position:absolute;left:14px;top:calc(14px + env(safe-area-inset-top));width:44px;height:44px;border-radius:50%;border:0;
   background:rgba(18,22,31,.65);color:#fff;display:grid;place-items:center;z-index:2}
 .hero .back svg{width:20px;height:20px}
@@ -214,7 +213,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
 .as-item.danger,.as-item.danger svg{color:var(--danger)}
 
 /* ---------- quick sheet (shared from another app) ---------- */
-.q-scrim{position:fixed;inset:0;background:rgba(5,7,12,.55)}
+.q-scrim{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(5,7,12,.55)}
 .q-sheet{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;background:var(--surface);border-radius:24px 24px 0 0;
   padding:10px 18px calc(20px + var(--safe-b));animation:up .22s ease-out}
 @keyframes up{from{transform:translateY(40px);opacity:0}}
@@ -227,6 +226,20 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
 .q-more{display:block;margin:14px auto 0;border:0;background:none;color:var(--accent);font-weight:600;padding:8px}
 .q-msg{display:flex;gap:12px;align-items:center;font-size:15px;line-height:1.45;color:var(--text-2);padding:8px 2px 16px}
 .q-msg svg{flex:none;width:24px;height:24px}
+
+/* ---------- older WebViews (Android 8 to 10 without updates) ---------- */
+@supports not (aspect-ratio:1){
+  .thumb,.hero{height:0;padding-top:62.5%}
+}
+.no-flexgap .head>*+*,.no-flexgap .link>*+*,.no-flexgap .clip-card>*+*,.no-flexgap .q-row>*+*,.no-flexgap .switch-row>*+*,
+.no-flexgap .search>*+*,.no-flexgap .error>*+*,.no-flexgap .done-text>*+*,.no-flexgap .as-item>*+*,.no-flexgap .pl-item>*+*,
+.no-flexgap .q-msg>*+*,.no-flexgap .big-btn>*+*,.no-flexgap .pill-btn>*+*,.no-flexgap .cover-btn>*+*{margin-left:10px}
+.no-flexgap .chips>*,.no-flexgap .pills>*,.no-flexgap .row-btns>*,.no-flexgap .filters>*,.no-flexgap .v-meta>*{margin:0 8px 8px 0}
+.no-flexgap .nav button>*+*{margin-top:3px}
+.webview-hint{margin-top:16px;padding:13px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);
+  font-size:14px;line-height:1.45;color:var(--text-2)}
+.webview-hint b{color:var(--text)}
+.webview-hint button{display:block;margin-top:10px}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -255,6 +268,8 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
       <button type="button" class="pill-btn" id="clipSave">Save</button>
       <button type="button" class="icon-btn" id="clipDismiss" aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
+
+    <div class="webview-hint" id="webviewHint" hidden></div>
 
     <div class="chips" aria-label="Supported sites"><span>YouTube</span><span>Instagram</span><span>TikTok</span><span>X</span><span>Facebook</span><span>Vimeo</span></div>
     <div class="error" id="saveError" role="alert" hidden><span></span><button type="button" data-open-settings hidden>Settings</button></div>
@@ -291,7 +306,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
         <span class="txt"><b>Only on Wi-Fi</b><span>Downloads wait for Wi-Fi instead of using mobile data.</span></span>
         <input type="checkbox" class="switch" id="setWifi">
       </label>
-      <p style="margin:8px 0 0">Up to 2 downloads run at once; the rest wait in line and retry on their own if the connection drops.</p>
+      <p style="margin:8px 0 0" id="parallelText">Up to 2 downloads run at once; the rest wait in line and retry on their own if the connection drops.</p>
     </section>
     <section class="group">
       <h3>Download engine</h3>
@@ -423,6 +438,15 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
 </div>
 
 <script>
+// older WebViews don't support "gap" in flex layouts; detect it once and use margins instead
+(function(){
+  const d = document.createElement("div");
+  d.style.cssText = "display:flex;flex-direction:column;row-gap:1px;position:absolute;visibility:hidden";
+  d.appendChild(document.createElement("div")); d.appendChild(document.createElement("div"));
+  document.documentElement.appendChild(d);
+  if(d.scrollHeight !== 1) document.documentElement.classList.add("no-flexgap");
+  d.remove();
+})();
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const native = window.WebSaveAndroid || null;
@@ -447,7 +471,7 @@ async function api(path, opts={}){
   return d;
 }
 const postJSON = (path, body) => api(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function duration(s){
   if(s == null || s === "") return "";
   s = Math.round(s); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = String(s%60).padStart(2,"0");
@@ -559,6 +583,8 @@ function renderLibrary(){
   $("#libCount").textContent = saved ? `${saved} saved` : "";
 }
 async function loadHistory(){
+  // nothing to repaint while the app is in the background; the notification shows progress
+  if(document.hidden){ clearTimeout(state.historyTimer); return; }
   try{ state.items = (await api("/api/history")).items || []; }catch(e){ return; }
   renderLibrary();
   clearTimeout(state.historyTimer);
@@ -812,6 +838,7 @@ function stopTracking(){ clearTimeout(state.timer); }
 async function track(){
   stopTracking();
   const job = state.job; if(!job) return;
+  if(document.hidden) return;
   let s;
   try{ s = await api("/api/status/" + job.id); }catch(e){ state.timer = setTimeout(track, 1000); return; }
   if(state.job !== job) return;
@@ -908,6 +935,9 @@ async function loadSettings(){
     $("#engineState").textContent = c.settings.engine_note ||
       (last ? `Last checked ${new Date(last * 1000).toLocaleDateString()}.` : "Not checked yet.");
     $("#shortcutsGroup").hidden = !c.app;
+    $("#parallelText").textContent = c.parallel === 1
+      ? "This phone runs one download at a time to stay smooth; the rest wait in line and retry on their own if the connection drops."
+      : `Up to ${c.parallel || 2} downloads run at once; the rest wait in line and retry on their own if the connection drops.`;
   }catch(e){}
 }
 async function saveSetting(key, value){ await postJSON("/api/settings", {[key]: value}).catch(()=>{}); }
@@ -1011,6 +1041,21 @@ function initQuick(){
     $("#qClose").onclick = closeQuick; $("#qFull").onclick = () => quickOpenFull("");
   }, 1500);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden || QUICK) return;
+  if(state.job) track();
+  else if(state.view === "tabs") loadHistory();
+});
+
+/* ---------- outdated WebView ---------- */
+window.showWebViewHint = function(version){
+  const box = $("#webviewHint");
+  box.innerHTML = `<b>Make WebSave faster</b><br>This phone's Android System WebView (version ${esc(version)}) is out of date, which slows down apps like this one. Updating it is free.`
+    + (native && native.openStore ? `<button type="button" class="btn" id="webviewUpdate">Update in Play Store</button>` : "");
+  box.hidden = false;
+  const b = $("#webviewUpdate"); if(b) b.onclick = () => native.openStore("com.google.android.webview");
+};
 
 /* ---------- start ---------- */
 if(QUICK){ initQuick(); }
