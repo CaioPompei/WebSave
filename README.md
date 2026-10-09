@@ -4,13 +4,19 @@ Save videos from YouTube, Instagram, TikTok, X and hundreds of other sites strai
 
 ## Features
 
-- Paste a link or share it from any app with **Share → WebSave**
-- Pick the format (video or audio only) and the quality the video actually offers, with file sizes
-- Saves H.264 + AAC MP4 files to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`), ready for WhatsApp and CapCut
+- **Save from anywhere**: share a link to WebSave from any app and a small sheet saves it without leaving that app; progress shows in the notifications
+- **Quick Settings tile and icon shortcut** ("Save link") for whatever link you copied, plus a "Link copied" card when you open the app
+- **Trim** before saving (videos, audio and GIFs)
+- **Presets**: For CapCut, For WhatsApp, 60 s clip, Music
+- Pick the format (video, GIF or audio) and the quality the video actually offers, with file sizes
 - Silent clips (GIFs on X, Reddit, Imgur, Giphy, Tenor) are saved as real animated GIFs
-- **Library** keeps every download: open it, send it to another app, save it again in another quality or remove it
-- Downloads keep running in the background and can be cancelled
-- Import YouTube cookies and update the download engine (yt-dlp) from Settings
+- **Playlists and carousels**: choose which items to save
+- **Music with cover art**: audio files get title, artist and cover
+- **Save cover image** of any video
+- **Library** with search and filters (videos, GIFs, audio)
+- **Smart queue**: 2 downloads at a time, automatic retries, optional "only on Wi-Fi"
+- **Self-updating engine**: yt-dlp updates itself once a week
+- Saves to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`)
 
 ## Build
 

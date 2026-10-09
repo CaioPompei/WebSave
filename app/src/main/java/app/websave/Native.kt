@@ -102,19 +102,106 @@ object Native {
     }
 
     /**
+     * Keep only [startMs, endMs] of a video or audio file, without re-encoding. Video starts at the
+     * keyframe at or before startMs, which is how every lossless cutter works.
+     */
+    @JvmStatic
+    fun trim(input: String, output: String, startMs: Long, endMs: Long) {
+        class Source(val extractor: MediaExtractor, val track: Int, var done: Boolean = false)
+        val probe = MediaExtractor()
+        probe.setDataSource(input)
+        val muxer = MediaMuxer(output, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val sources = ArrayList<Source>()
+        var maxSample = 1 shl 20
+        try {
+            for (i in 0 until probe.trackCount) {
+                val format = probe.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (!mime.startsWith("video/") && !mime.startsWith("audio/")) continue
+                val extractor = MediaExtractor()
+                extractor.setDataSource(input)
+                extractor.selectTrack(i)
+                if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                    maxSample = maxOf(maxSample, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                }
+                if (mime.startsWith("video/") && format.containsKey("rotation-degrees")) {
+                    muxer.setOrientationHint(format.getInteger("rotation-degrees"))
+                }
+                sources += Source(extractor, muxer.addTrack(format))
+            }
+        } finally {
+            probe.release()
+        }
+        if (sources.isEmpty()) {
+            muxer.release()
+            throw IOException("Nothing to trim in this file")
+        }
+        val startUs = startMs * 1000
+        val endUs = endMs * 1000
+        sources.forEach { it.extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC) }
+        val baseUs = sources.map { it.extractor.sampleTime }.filter { it >= 0 }.minOrNull() ?: 0L
+        try {
+            muxer.start()
+            val buffer = ByteBuffer.allocate(maxOf(maxSample, 4 shl 20))
+            val info = MediaCodec.BufferInfo()
+            while (true) {
+                val next = sources.filter { !it.done }.minByOrNull { it.extractor.sampleTime } ?: break
+                val time = next.extractor.sampleTime
+                if (time < 0 || time > endUs) { next.done = true; continue }
+                val size = next.extractor.readSampleData(buffer, 0)
+                if (size < 0) { next.done = true; continue }
+                val isKeyFrame = next.extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                info.set(0, size, maxOf(0L, time - baseUs), if (isKeyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                muxer.writeSampleData(next.track, buffer, info)
+                if (!next.extractor.advance()) next.done = true
+            }
+            muxer.stop()
+        } finally {
+            sources.forEach { it.extractor.release() }
+            muxer.release()
+        }
+        val retriever = MediaMetadataRetriever()
+        val playable = try {
+            retriever.setDataSource(output)
+            (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) > 0
+        } catch (_: Exception) {
+            false
+        } finally {
+            retriever.release()
+        }
+        if (!playable) {
+            File(output).delete()
+            throw IOException("The trimmed file isn't playable")
+        }
+    }
+
+    /** True on Wi-Fi, Ethernet or any network the user marked as unmetered. */
+    @JvmStatic
+    fun isOnWifi(): Boolean {
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return false
+        val caps = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) ||
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }
+
+    /**
      * Decode evenly spaced frames of a clip, scaled to [maxWidth], and write them as raw RGBA
      * back to back into [output]. Python turns them into a GIF. Returns "width|height|count|delayMs".
+     * Only frames between [startMs] and [endMs] are used (endMs < 0 means "to the end").
      * Uses the hardware decoder first and falls back to MediaMetadataRetriever.
      */
     @JvmStatic
-    fun gifFrames(video: String, output: String, maxWidth: Int, fps: Int, maxFrames: Int): String {
+    fun gifFrames(video: String, output: String, maxWidth: Int, fps: Int, maxFrames: Int, startMs: Long, endMs: Long): String {
         val decoded = try {
-            FileOutputStream(output).buffered(1 shl 20).use { decodeFrames(video, it, maxWidth, fps, maxFrames) }
+            FileOutputStream(output).buffered(1 shl 20).use { decodeFrames(video, it, maxWidth, fps, maxFrames, startMs, endMs) }
         } catch (_: Exception) {
             null
         }
         if (decoded != null && decoded.count > 0) return decoded.toString()
-        val retrieved = FileOutputStream(output).buffered(1 shl 20).use { retrieveFrames(video, it, maxWidth, fps, maxFrames) }
+        val retrieved = FileOutputStream(output).buffered(1 shl 20).use {
+            retrieveFrames(video, it, maxWidth, fps, maxFrames, startMs, endMs)
+        }
         if (retrieved.count == 0) throw IOException("Couldn't read frames from this clip")
         return retrieved.toString()
     }
@@ -131,7 +218,9 @@ object Native {
     }
 
     /** Sequential decode with MediaCodec: robust for streamed clips (fragmented MP4, MPEG-TS). */
-    private fun decodeFrames(video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int): Frames {
+    private fun decodeFrames(
+        video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int, startMs: Long, endMs: Long
+    ): Frames {
         val result = Frames()
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
@@ -142,8 +231,12 @@ object Native {
             } ?: return result
             extractor.selectTrack(track)
             val format = extractor.getTrackFormat(track)
-            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            val fullUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            val startUs = maxOf(0L, startMs * 1000)
+            val endUs = if (endMs > 0) endMs * 1000 else Long.MAX_VALUE
+            val durationUs = if (endMs > 0) endUs - startUs else maxOf(0L, fullUs - startUs)
             val stepUs = maxOf(1_000_000L / fps, if (durationUs > 0) durationUs / maxFrames else 0L)
+            if (startUs > 0) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             result.delayMs = (stepUs / 1000).toInt()
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
             codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
@@ -177,7 +270,11 @@ object Native {
                     continue
                 }
                 val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                if (info.size > 0) {
+                if (info.size > 0 && info.presentationTimeUs > endUs) {
+                    codec.releaseOutputBuffer(outIndex, false)
+                    break
+                }
+                if (info.size > 0 && info.presentationTimeUs >= startUs) {
                     if (firstUs < 0) { firstUs = info.presentationTimeUs; nextUs = firstUs }
                     if (info.presentationTimeUs >= nextUs) {
                         codec.getOutputImage(outIndex)?.use { image ->
@@ -231,17 +328,21 @@ object Native {
     }
 
     /** Fallback: ask MediaMetadataRetriever for each frame. */
-    private fun retrieveFrames(video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int): Frames {
+    private fun retrieveFrames(
+        video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int, startMs: Long, endMs: Long
+    ): Frames {
         val result = Frames()
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(video)
-            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            val fullMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            val fromMs = maxOf(0L, startMs)
+            val durationMs = (if (endMs > 0) minOf(endMs, fullMs) else fullMs) - fromMs
             val count = ((durationMs * fps) / 1000).toInt().coerceIn(1, maxFrames)
             val stepUs = if (count > 1) durationMs * 1000 / count else 0L
             result.delayMs = if (count > 1) (stepUs / 1000).toInt() else 100
             for (i in 0 until count) {
-                val t = i * stepUs
+                val t = fromMs * 1000 + i * stepUs
                 val frame = retriever.getFrameAtTime(t, MediaMetadataRetriever.OPTION_CLOSEST)
                     ?: retriever.getFrameAtTime(t, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                     ?: continue
@@ -271,7 +372,7 @@ object Native {
         val file = File(path)
         val ext = file.extension.lowercase()
         val isAudio = ext in AUDIO_EXTENSIONS
-        val isGif = ext == "gif"
+        val isImage = ext in setOf("gif", "jpg", "jpeg", "png", "webp")
         val mime = when (ext) {
             "mp4" -> "video/mp4"
             "webm" -> "video/webm"
@@ -280,10 +381,13 @@ object Native {
             "m4a" -> "audio/mp4"
             "mp3" -> "audio/mpeg"
             "gif" -> "image/gif"
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
             "opus", "ogg", "oga" -> "audio/ogg"
             else -> if (isAudio) "audio/*" else "video/*"
         }
-        // videos and GIFs share one "WebSave" album in the gallery
+        // videos, GIFs and covers share one "WebSave" album in the gallery
         val root = if (isAudio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_PICTURES
         val folder = "$root/WebSave"
 
@@ -292,7 +396,7 @@ object Native {
             val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
             val collection = when {
                 isAudio -> MediaStore.Audio.Media.getContentUri(volume)
-                isGif -> MediaStore.Images.Media.getContentUri(volume)
+                isImage -> MediaStore.Images.Media.getContentUri(volume)
                 else -> MediaStore.Video.Media.getContentUri(volume)
             }
             val now = System.currentTimeMillis()
@@ -307,7 +411,7 @@ object Native {
                 put(MediaStore.MediaColumns.DATE_MODIFIED, now / 1000)
             }
             // galleries hide videos without a duration, so fill it in instead of relying on the scan
-            val meta = if (!isAudio && !isGif) readVideoMeta(path) else null
+            val meta = if (!isAudio && !isImage) readVideoMeta(path) else null
             val resolver = context.contentResolver
             uri = resolver.insert(collection, values) ?: throw IOException("Couldn't create the file in the gallery")
             resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }

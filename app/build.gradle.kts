@@ -54,6 +54,7 @@ chaquopy {
             install("yt-dlp-ejs")
             install("certifi")
             install("pillow")
+            install("mutagen")
         }
     }
 }

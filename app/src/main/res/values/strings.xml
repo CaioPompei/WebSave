@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_label">Save with WebSave</string>
+    <string name="tile_label">Save link</string>
+    <string name="shortcut_short">Save copied link</string>
+    <string name="shortcut_long">Save the link you copied</string>
+</resources>

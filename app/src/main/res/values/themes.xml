@@ -8,4 +8,14 @@
         <item name="android:navigationBarColor">@color/background</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+    <!-- the quick-save sheet floats over the app the link came from -->
+    <style name="QuickTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#1B2130</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

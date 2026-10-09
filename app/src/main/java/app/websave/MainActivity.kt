@@ -1,34 +1,26 @@
 package app.websave
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.text.Html
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.ServerSocket
-import java.net.URL
 import kotlin.concurrent.thread
 
+/** The full app: Save, Library and Settings. */
 class MainActivity : ComponentActivity() {
 
     companion object {
-        // the Python server lives as long as the app process does
-        @Volatile private var port = 0
+        /** Extra with a link to open right away (from the quick-save sheet's "More options"). */
+        const val EXTRA_URL = "app.websave.URL"
     }
 
     private lateinit var web: WebView
@@ -42,28 +34,11 @@ class MainActivity : ComponentActivity() {
     }
     private val requestPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Native.context = applicationContext
-
         web = WebView(this)
         setContentView(web)
-        web.setBackgroundColor(getColor(R.color.background))
-        web.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = false
-            mediaPlaybackRequiresUserGesture = true
-        }
-        web.addJavascriptInterface(JsBridge(this), "WebSaveAndroid")
-        web.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (request.url.host == "127.0.0.1") return false
-                try { startActivity(Intent(Intent.ACTION_VIEW, request.url)) } catch (_: Exception) {}
-                return true
-            }
-        }
+        setUpWebView(web, getColor(R.color.background))
         web.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams
@@ -95,7 +70,20 @@ class MainActivity : ComponentActivity() {
 
         pendingLink = linkFrom(intent)
         web.loadDataWithBaseURL(null, plainScreen("Starting WebSave…"), "text/html", "utf-8", null)
-        startServer()
+        thread {
+            val ok = try { Server.awaitReady(this) } catch (_: Throwable) { false }
+            runOnUiThread {
+                if (ok) {
+                    ready = true
+                    val query = pendingLink?.let { "?url=" + Uri.encode(it) } ?: ""
+                    pendingLink = null
+                    web.loadUrl(Server.base + query)
+                } else {
+                    web.loadDataWithBaseURL(null, plainScreen("WebSave couldn't start. Close and reopen the app."),
+                        "text/html", "utf-8", null)
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -105,61 +93,13 @@ class MainActivity : ComponentActivity() {
         else pendingLink = link
     }
 
-    private fun startServer() = thread {
-        try {
-            if (port == 0) {
-                if (!Python.isStarted()) Python.start(AndroidPlatform(applicationContext))
-                val free = ServerSocket(0).use { it.localPort }
-                Python.getInstance().getModule("websave").callAttr(
-                    "start", free, filesDir.absolutePath, cacheDir.absolutePath,
-                    applicationInfo.nativeLibraryDir
-                )
-                port = free
-            }
-            val base = "http://127.0.0.1:$port/"
-            val ok = waitFor(base + "api/ping")
-            runOnUiThread {
-                if (ok) {
-                    ready = true
-                    val query = pendingLink?.let { "?url=" + Uri.encode(it) } ?: ""
-                    pendingLink = null
-                    web.loadUrl(base + query)
-                } else {
-                    web.loadDataWithBaseURL(null, plainScreen("WebSave couldn't start. Close and reopen the app."), "text/html", "utf-8", null)
-                }
-            }
-        } catch (e: Throwable) {
-            runOnUiThread {
-                web.loadDataWithBaseURL(null, plainScreen("Startup failed: ${e.message}"), "text/html", "utf-8", null)
-            }
-        }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Android only lets an app read the clipboard while it has focus
+        if (hasFocus && ready) web.evaluateJavascript("window.onAppFocus && onAppFocus()", null)
     }
 
-    private fun waitFor(url: String): Boolean {
-        repeat(120) {
-            try {
-                val connection = URL(url).openConnection() as HttpURLConnection
-                connection.connectTimeout = 500
-                connection.readTimeout = 1000
-                if (connection.responseCode == 200) return true
-            } catch (_: Exception) {}
-            Thread.sleep(250)
-        }
-        return false
-    }
-
-    private fun linkFrom(intent: Intent?): String? {
-        if (intent?.action != Intent.ACTION_SEND) return null
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-        return Regex("https?://\\S+").find(text)?.value
-    }
-
-    private fun plainScreen(message: String) = """
-        <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>
-          html,body{height:100%;margin:0}
-          body{display:flex;align-items:center;justify-content:center;background:#12161F;color:#8F98AB;
-               font:500 16px system-ui,sans-serif;padding:24px;text-align:center}
-        </style></head><body>${Html.escapeHtml(message)}</body></html>
-    """.trimIndent()
+    private fun linkFrom(intent: Intent?): String? =
+        intent?.getStringExtra(EXTRA_URL)?.takeIf { it.isNotBlank() }
+            ?: if (intent?.action == Intent.ACTION_SEND) firstLink(intent.getStringExtra(Intent.EXTRA_TEXT)) else null
 }
