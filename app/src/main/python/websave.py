@@ -32,6 +32,7 @@ CFG = {
     "merge": None,                                    # native (Android) video + audio merger
     "save": None,                                     # native (Android) save-to-gallery function
     "qjs": None,                                      # QuickJS binary bundled with the APK
+    "frames": None,                                   # native (Android) frame extractor for GIFs
 }
 
 # ---------------------------------------------------------------- engine (yt-dlp)
@@ -78,6 +79,8 @@ def cookies_path():
 def base_opts():
     opts = {
         "quiet": True, "no_warnings": True, "noprogress": True, "no_color": True, "noplaylist": True,
+        # keep the download time as the file date, so it shows up on top of the gallery
+        "updatetime": False,
         "cachedir": os.path.join(CFG["data_dir"], "cache"),
         # YouTube needs a JavaScript runtime to unlock every quality; these are its solver scripts
         "remote_components": ["ejs:github"],
@@ -158,6 +161,27 @@ def _size(f):
     return f.get("filesize") or f.get("filesize_approx")
 
 
+def has_audio(info):
+    fmts = info.get("formats") or []
+    return any(f.get("acodec") not in (None, "none") for f in fmts) or (
+        not looks_like_gif(info) and any(f.get("acodec") is None for f in fmts))
+
+
+def looks_like_gif(info):
+    """Sites like X, Reddit, Imgur, Giphy and Tenor serve GIFs as silent MP4 clips."""
+    fmts = info.get("formats") or []
+    urls = [f.get("url") or "" for f in fmts] + [info.get("url") or "", info.get("webpage_url") or ""]
+    if any(f.get("ext") == "gif" for f in fmts) or any(u.split("?")[0].lower().endswith((".gif", ".gifv")) for u in urls):
+        return True
+    if any("/tweet_video/" in u for u in urls):            # X animated GIFs
+        return True
+    if info.get("extractor_key") in ("Giphy", "Tenor"):
+        return True
+    known = [f.get("acodec") for f in fmts if f.get("acodec") is not None]
+    silent = bool(known) and all(a == "none" for a in known) and not any(_audio_only(f) for f in fmts)
+    return silent and (info.get("duration") or 0) <= 120
+
+
 def choose(info, kind, quality):
     """Prefer H.264 + AAC in MP4, which the gallery, WhatsApp and CapCut all accept."""
     fmts = info.get("formats") or []
@@ -168,6 +192,18 @@ def choose(info, kind, quality):
 
     def bitrate(f):
         return f.get("abr") or f.get("tbr") or 0
+
+    if kind == "gif":
+        gifs = [f for f in fmts if f.get("ext") == "gif"]
+        if gifs:
+            return ("single", max(gifs, key=resolution)["format_id"])
+        # the source clip only needs to be a little sharper than the GIF itself
+        clips = [f for f in fmts if _has_video(f) and resolution(f) <= 720]  # 0 = size unknown
+        if clips:
+            best = max(clips, key=lambda f: (f.get("ext") == "mp4", (f.get("vcodec") or "").startswith(("avc1", "h264")),
+                                             resolution(f), f.get("tbr") or 0))
+            return ("single", best["format_id"])
+        return ("single", "bv*[height<=720]/b[height<=720]/b")
 
     if kind == "audio":
         audios = [f for f in fmts if _audio_only(f)]
@@ -217,6 +253,61 @@ def quality_options(info):
             for r in sorted(found, reverse=True)]
 
 
+# ---------------------------------------------------------------- GIF
+
+GIF_FPS = 12
+GIF_MAX_FRAMES = 200
+
+
+def make_gif(source, target, width):
+    """Turn a silent clip into a real animated GIF that plays in any gallery."""
+    if source.lower().endswith(".gif"):
+        os.replace(source, target)
+        return
+    if HAS_FFMPEG:
+        graph = (f"fps={GIF_FPS},scale='min({width},iw)':-2:flags=lanczos,split[a][b];"
+                 "[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-vf", graph, "-loop", "0", target], check=True)
+        return
+    if CFG["frames"]:
+        raw = source + ".rgba"
+        w, h, count, delay = (int(x) for x in str(CFG["frames"](source, raw, width, GIF_FPS, GIF_MAX_FRAMES)).split("|"))
+        try:
+            encode_gif(raw, w, h, count, delay, target)
+        finally:
+            if os.path.exists(raw):
+                os.remove(raw)
+        return
+    raise RuntimeError("Creating GIFs needs ffmpeg. Install it with: pkg install ffmpeg")
+
+
+def encode_gif(raw, width, height, count, delay_ms, target):
+    """Encode raw RGBA frames into a GIF with one shared, optimized palette."""
+    from PIL import Image
+    frame_size = width * height * 4
+
+    def frames():
+        with open(raw, "rb") as f:
+            for _ in range(count):
+                data = f.read(frame_size)
+                if len(data) < frame_size:
+                    return
+                yield Image.frombytes("RGBA", (width, height), data).convert("RGB")
+
+    # build the palette from a dozen frames spread across the clip, so colors stay stable
+    step = max(1, count // 12)
+    samples = [fr for i, fr in enumerate(frames()) if i % step == 0][:12]
+    if not samples:
+        raise RuntimeError("Couldn't read any frame from this clip.")
+    sheet = Image.new("RGB", (width, height * len(samples)))
+    for i, fr in enumerate(samples):
+        sheet.paste(fr, (0, height * i))
+    palette = sheet.quantize(colors=256, method=Image.Quantize.MEDIANCUT)
+
+    out = [fr.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG) for fr in frames()]
+    out[0].save(target, save_all=True, append_images=out[1:], duration=max(20, delay_ms), loop=0, disposal=1)
+
+
 # ---------------------------------------------------------------- history
 
 def _history_file():
@@ -255,7 +346,7 @@ def remove_history(item_id):
 
 SITES = {"Youtube": "YouTube", "Twitter": "X", "TikTok": "TikTok", "Instagram": "Instagram",
          "Facebook": "Facebook", "Vimeo": "Vimeo", "Reddit": "Reddit", "Generic": None}
-ACTIVE = ("analyzing", "downloading", "merging", "saving")
+ACTIVE = ("analyzing", "downloading", "merging", "converting", "saving")
 
 
 def api_config():
@@ -276,8 +367,11 @@ def api_info(body):
         with yt().YoutubeDL(base_opts()) as ydl:
             video = _first_video(ydl.extract_info(url, download=False))
         options = quality_options(video)
+        gif_like = looks_like_gif(video)
         notice = None
-        if video.get("extractor_key") == "Youtube" and (not options or options[0]["res"] <= 360):
+        if gif_like:
+            notice = "This is a silent clip, so WebSave saves it as a GIF that plays right in your gallery."
+        elif video.get("extractor_key") == "Youtube" and (not options or options[0]["res"] <= 360):
             notice = ("YouTube only offered low quality for this video. Update the engine in Settings "
                       "or import your cookies to try to unlock the others.")
         elif len(options) <= 1:
@@ -291,6 +385,8 @@ def api_info(body):
             "site": SITES.get(video.get("extractor_key"), video.get("extractor_key")),
             "qualities": options,
             "audio_size": estimated_size(video, "audio", "best"),
+            "gif_like": gif_like,
+            "has_audio": has_audio(video),
             "notice": notice,
         }, 200
     except Exception as e:
@@ -338,7 +434,15 @@ def _run_download(job_id, url, kind, quality):
         mode, selection = choose(info, kind, quality)
 
         job["status"] = "downloading"
-        if mode == "merge":
+        if kind == "gif":
+            span.update(start=0, weight=80)
+            clip = fetch(info, selection, "c")
+            job.update(status="converting", progress=85)
+            final = os.path.join(folder, name + ".gif")
+            make_gif(clip, final, int(quality) if str(quality).isdigit() else 480)
+            if os.path.exists(clip):
+                os.remove(clip)
+        elif mode == "merge":
             span.update(start=0, weight=85)
             video = fetch(info, selection[0], "v")
             span.update(start=85, weight=13)
@@ -365,6 +469,8 @@ def _run_download(job_id, url, kind, quality):
 
         filename = os.path.basename(final)
         mime = mimetypes.guess_type(filename)[0] or ("audio/mp4" if filename.endswith(".m4a") else "video/mp4")
+        if filename.endswith(".gif"):
+            mime = "image/gif"
         size = os.path.getsize(final)
         job.update(filename=filename, mime=mime, size=size)
         if CFG["save"]:
@@ -587,7 +693,8 @@ def start(port, data_dir, cache_dir, native_lib_dir=None):
     CFG.update(app=True, data_dir=data_dir, tmp_dir=cache_dir,
                qjs=qjs if qjs and os.access(qjs, os.X_OK) else None,
                merge=lambda v, a, out: native.merge(v, a, out),
-               save=lambda path, name: native.save(path, name))
+               save=lambda path, name: native.save(path, name),
+               frames=lambda src, out, width, fps, limit: native.gifFrames(src, out, width, fps, limit))
     threading.Thread(target=serve, args=(port,), daemon=True).start()
     threading.Thread(target=yt, daemon=True).start()  # warm up the engine
 

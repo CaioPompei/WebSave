@@ -6,7 +6,8 @@ Save videos from YouTube, Instagram, TikTok, X and hundreds of other sites strai
 
 - Paste a link or share it from any app with **Share → WebSave**
 - Pick the format (video or audio only) and the quality the video actually offers, with file sizes
-- Saves H.264 + AAC MP4 files to `Movies/WebSave` (audio to `Music/WebSave`), ready for the gallery, WhatsApp and CapCut
+- Saves H.264 + AAC MP4 files to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`), ready for WhatsApp and CapCut
+- Silent clips (GIFs on X, Reddit, Imgur, Giphy, Tenor) are saved as real animated GIFs
 - **Library** keeps every download: open it, send it to another app, save it again in another quality or remove it
 - Downloads keep running in the background and can be cancelled
 - Import YouTube cookies and update the download engine (yt-dlp) from Settings

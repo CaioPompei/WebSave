@@ -201,7 +201,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
     </section>
     <section class="group">
       <h3>Saved files</h3>
-      <p>Videos go to Movies/WebSave and audio to Music/WebSave, so they show up in your gallery, music player and editors like CapCut.</p>
+      <p>Videos and GIFs go to the WebSave album in your gallery (Pictures/WebSave). Audio goes to Music/WebSave.</p>
       <div class="about"><span>Engine version</span><b id="aboutEngine">…</b></div>
     </section>
   </main>
@@ -218,10 +218,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
       <div class="v-meta" id="vMeta"></div>
       <div class="notice" id="vNotice" hidden></div>
 
-      <div class="pills" role="radiogroup" aria-label="Format">
-        <button type="button" role="radio" aria-checked="true" data-kind="video">Video</button>
-        <button type="button" role="radio" aria-checked="false" data-kind="audio">Audio only</button>
-      </div>
+      <div class="pills" role="radiogroup" aria-label="Format" id="vKinds"></div>
       <div class="options" role="radiogroup" aria-label="Quality" id="vOptions"></div>
 
       <div class="error" id="videoError" role="alert" hidden><span></span><button type="button" data-open-settings hidden>Settings</button></div>
@@ -332,10 +329,11 @@ $$("[data-open-settings]").forEach(b => b.addEventListener("click", () => showTa
 
 /* ---------- library ---------- */
 function cardHTML(item){
-  const meta = [item.site, item.kind === "audio" ? "Audio" : item.label].filter(Boolean).join(", ");
+  const meta = [item.site, {audio:"Audio", gif:"GIF"}[item.kind] || item.label].filter(Boolean).join(", ");
   let badge = "";
   if(item.active) badge = `<span class="badge" style="background:var(--accent)">${Math.floor(item.progress||0)}%</span>`;
   else if(item.kind === "audio") badge = `<span class="badge" style="background:#C9D2E3">Audio</span>`;
+  else if(item.kind === "gif") badge = `<span class="badge" style="background:#D2C4F5">GIF</span>`;
   else badge = `<span class="badge" style="background:var(--success)">Saved</span>`;
   const img = item.thumbnail ? `<img src="${esc(item.thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
   return `<button type="button" class="card" data-id="${esc(item.id)}">
@@ -372,7 +370,7 @@ document.addEventListener("click", e => {
 function openItemSheet(item){
   state.sheetItem = item;
   $("#isTitle").textContent = item.title || "Untitled video";
-  $("#isSub").textContent = [item.site, item.kind === "audio" ? "Audio" : item.label, bytes(item.size), item.location].filter(Boolean).join(", ");
+  $("#isSub").textContent = [item.site, {audio:"Audio", gif:"GIF"}[item.kind] || item.label, bytes(item.size), item.location].filter(Boolean).join(", ");
   $("#isShare").hidden = !(native && item.uri);
   $("#isAgain").hidden = !item.url;
   $("#itemSheet").showModal();
@@ -419,8 +417,16 @@ function receiveLink(t){ if(state.view === "video" && !state.job) showTab("save"
 window.receiveLink = receiveLink;
 
 /* ---------- video screen ---------- */
+const KIND_LABELS = {video:"Video", gif:"GIF", audio:"Audio only"};
+function availableKinds(d){
+  const kinds = d.gif_like ? ["gif", "video"] : ["video"];
+  if(!d.gif_like && (!d.duration || d.duration <= 60)) kinds.push("gif");
+  if(d.has_audio !== false) kinds.push("audio");
+  return kinds;
+}
 function openVideo(d){
-  state.video = d; state.kind = "video"; state.quality = d.qualities.length ? d.qualities[0].value : "best";
+  state.video = d; state.kinds = availableKinds(d); state.kind = state.kinds[0];
+  state.quality = d.qualities.length ? d.qualities[0].value : "best";
   stopTracking(); state.job = null;
   const img = $("#vThumb"); img.hidden = !d.thumbnail; img.src = d.thumbnail || ""; img.onerror = () => { img.hidden = true; };
   $(".hero").style.background = tint(d.url);
@@ -434,23 +440,30 @@ function openVideo(d){
 function currentOption(){
   const d = state.video;
   if(state.kind === "audio") return {label:"Audio", size:d.audio_size};
+  if(state.kind === "gif") return {label:"GIF", size:null};
   const q = d.qualities.find(x => x.value === state.quality);
   return q ? {label:resLabel(q.res), size:q.size} : {label:"Original", size:null};
 }
 function renderOptions(){
   const d = state.video;
-  $$(".pills button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.kind === state.kind)));
+  $("#vKinds").innerHTML = state.kinds.map(k =>
+    `<button type="button" role="radio" aria-checked="${k === state.kind}" data-kind="${k}">${KIND_LABELS[k]}</button>`).join("");
   let rows;
   if(state.kind === "audio") rows = [{value:"best", label:"Best audio", tag:"M4A", size:d.audio_size}];
+  else if(state.kind === "gif") rows = [{value:"480", label:"480 px wide", tag:"Sharper", size:null},
+                                        {value:"320", label:"320 px wide", tag:"Smaller file", size:null}];
   else if(d.qualities.length) rows = d.qualities.slice(0,5).map(q => ({value:q.value, label:resLabel(q.res), tag:resTag(q.res), size:q.size}));
   else rows = [{value:"best", label:"Original", tag:"", size:null}];
   if(!rows.some(r => r.value === state.quality)) state.quality = rows[0].value;
   $("#vOptions").innerHTML = rows.map(r => `<button type="button" class="option" role="radio" aria-checked="${r.value === state.quality}" data-q="${r.value}">
     <span class="radio"><i></i></span><span class="lbl">${esc(r.label)}</span><span class="tag">${esc(r.tag)}</span><span class="size">${bytes(r.size)}</span></button>`).join("");
   const o = currentOption();
-  $("#downloadLabel").textContent = state.kind === "audio" ? "Download audio" : `Download ${o.label}`;
+  $("#downloadLabel").textContent = state.kind === "audio" ? "Download audio" : state.kind === "gif" ? "Save as GIF" : `Download ${o.label}`;
 }
-$$(".pills button").forEach(b => b.addEventListener("click", () => { if(state.job) return; state.kind = b.dataset.kind; renderOptions(); }));
+$("#vKinds").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b || state.job) return;
+  state.kind = b.dataset.kind; renderOptions();
+});
 $("#vOptions").addEventListener("click", e => {
   const b = e.target.closest(".option"); if(!b || state.job) return;
   state.quality = b.dataset.q; renderOptions();
@@ -480,7 +493,8 @@ $("#cancel").addEventListener("click", async () => {
 });
 function paintBusy(s){
   const p = Math.max(0, Math.min(100, s.progress || 0));
-  const labels = {analyzing:"Preparing", downloading:"Downloading", merging:"Merging audio and video", saving:"Saving to your gallery"};
+  const labels = {analyzing:"Preparing", downloading:"Downloading", merging:"Merging audio and video",
+                  converting:"Creating GIF", saving:"Saving to your gallery"};
   $("#busyLabel").textContent = labels[s.status] || "Preparing";
   const size = state.job && state.job.size;
   $("#busyAmount").textContent = s.status === "downloading" ? (size ? `${bytes(size*p/100) || "0 MB"} of ${bytes(size)}` : `${Math.floor(p)}%`) : "";
@@ -493,12 +507,14 @@ async function track(){
   let s;
   try{ s = await api("/api/status/" + job.id); }catch(e){ state.timer = setTimeout(track, 1000); return; }
   if(state.job !== job) return;
-  if(["analyzing","downloading","merging","saving"].includes(s.status)){ paintBusy(s); state.timer = setTimeout(track, 600); return; }
+  if(["analyzing","downloading","merging","converting","saving"].includes(s.status)){ paintBusy(s); state.timer = setTimeout(track, 600); return; }
   state.job = null;
   if(s.status === "done"){
     setAction("done");
     if(native && s.uri){
-      $("#doneText").textContent = `Saved to ${s.location}. It's in your gallery and ready for CapCut.`;
+      $("#doneText").textContent = s.mime === "image/gif"
+        ? `Saved to ${s.location}. It plays as an animated GIF in your gallery.`
+        : `Saved to ${s.location}. It's in your gallery and ready for CapCut.`;
       $("#doneNative").hidden = false;
       $("#doneOpen").onclick = () => native.open(s.uri, s.mime);
       $("#doneShare").onclick = () => native.share(s.uri, s.mime);
@@ -517,7 +533,7 @@ async function reopenJob(item){
   state.video = {url:item.url, title:item.title, thumbnail:item.thumbnail, duration:item.duration, channel:item.channel,
     site:item.site, qualities:[], audio_size:null, notice:null};
   openVideo(state.video);
-  $("#vOptions").innerHTML = `<div class="option"><span class="lbl">${esc(item.kind === "audio" ? "Audio" : item.label || "Video")}</span></div>`;
+  $("#vOptions").innerHTML = `<div class="option"><span class="lbl">${esc({audio:"Audio", gif:"GIF"}[item.kind] || item.label || "Video")}</span></div>`;
   state.job = {id:item.id, size:null};
   setAction("busy"); track();
 }

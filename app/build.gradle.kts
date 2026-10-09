@@ -53,6 +53,7 @@ chaquopy {
             install("yt-dlp")
             install("yt-dlp-ejs")
             install("certifi")
+            install("pillow")
         }
     }
 }
