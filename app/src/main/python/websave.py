@@ -148,6 +148,9 @@ def explain_error(e):
         return ("This video is private. Only videos that open without signing in can be saved.", None)
     if "urlopen error" in low or "getaddrinfo" in low or "timed out" in low:
         return ("Couldn't reach the site. Check your connection and try again.", None)
+    if is_forbidden(e):
+        return ("The site refused this download (error 403), even after trying other ways. Update the engine in "
+                "Settings and try again; for YouTube, importing your cookies also helps.", "cookies")
     if "http error 404" in low or "unable to download webpage" in low:
         return ("This address didn't open. Check that the link is complete and the video still exists.", None)
     if "requested format is not available" in low:
@@ -161,6 +164,21 @@ def is_transient(e):
     return any(k in low for k in ("timed out", "timeout", "connection reset", "connection aborted", "temporarily",
                                   "http error 5", "incompleteread", "urlopen error", "network is unreachable",
                                   "remote end closed"))
+
+
+def is_forbidden(e):
+    low = str(e).lower()
+    return "403" in low and ("forbidden" in low or "http error" in low)
+
+
+# When a download gets "403 Forbidden", try again with these, in order:
+# 1. IPv4 only: download links are tied to the address that asked for them, and phones on mobile
+#    data often switch between IPv6 and IPv4 addresses mid-way.
+# 2. Also ask as YouTube's own apps, which don't need the JavaScript security check.
+FORBIDDEN_FALLBACKS = [
+    {"source_address": "0.0.0.0"},
+    {"source_address": "0.0.0.0", "extractor_args": {"youtube": {"player_client": ["android_vr", "ios", "tv_simply"]}}},
+]
 
 
 def thumbnail_of(entry):
@@ -514,12 +532,34 @@ SITES = {"Youtube": "YouTube", "Twitter": "X", "TikTok": "TikTok", "Instagram": 
 ACTIVE = ("waiting_wifi", "queued", "retrying", "analyzing", "downloading", "merging", "converting", "trimming", "saving")
 
 
+_JS_STATUS = {}
+
+
+def js_status():
+    """Name of a working JavaScript runtime for YouTube's security check, or None."""
+    if "value" not in _JS_STATUS:
+        found = None
+        candidates = [("QuickJS", CFG["qjs"])] if CFG["qjs"] else [
+            (n, shutil.which(b)) for n, b in (("Deno", "deno"), ("Node.js", "node"), ("Bun", "bun"), ("QuickJS", "qjs"))]
+        for name, path in candidates:
+            if not path:
+                continue
+            try:
+                subprocess.run([path, "--help"], capture_output=True, timeout=10)
+                found = name
+                break
+            except Exception:
+                continue
+        _JS_STATUS["value"] = found
+    return _JS_STATUS["value"]
+
+
 def api_config():
     try:
         version = yt().version.__version__
     except Exception:
         version = "?"
-    has_js = bool(CFG["qjs"]) or any(shutil.which(x) for x in ("deno", "node", "bun", "qjs"))
+    has_js = js_status()
     return {"app": CFG["app"], "cookies": bool(cookies_path()), "ffmpeg": HAS_FFMPEG,
             "engine": version, "js": has_js, "light": CFG["light"], "parallel": MAX_PARALLEL,
             "settings": settings()}, 200
@@ -595,15 +635,23 @@ def _run_download(job_id, body):
         while not SLOTS.acquire(timeout=1):
             check_cancel()
         try:
-            for attempt in range(3):
+            strategies = [{}] + FORBIDDEN_FALLBACKS
+            strategy = retries = 0
+            while True:
                 try:
-                    _download(job_id, body)
+                    _download(job_id, body, strategies[strategy])
                     break
                 except Exception as e:
-                    if job.get("cancel") or not is_transient(e) or attempt == 2:
+                    if job.get("cancel"):
+                        raise
+                    if is_forbidden(e) and strategy + 1 < len(strategies):
+                        strategy += 1
+                    elif is_transient(e) and retries < 2:
+                        retries += 1
+                        time.sleep(3 * retries)
+                    else:
                         raise
                     job.update(status="retrying", progress=0)
-                    time.sleep(3 * (attempt + 1))
         finally:
             SLOTS.release()
     except Exception as e:
@@ -614,8 +662,9 @@ def _run_download(job_id, body):
             job.update(status="error", error=text, code=code)
 
 
-def _download(job_id, body):
+def _download(job_id, body, extra=None):
     job = JOBS[job_id]
+    extra = extra or {}
     url, kind, quality = body.get("url", ""), body.get("kind", "video"), body.get("quality", "best")
     item = body.get("item")
     trim = body.get("trim") or None
@@ -633,7 +682,7 @@ def _download(job_id, body):
                 job["progress"] = round(span["start"] + p.get("downloaded_bytes", 0) / total * span["weight"], 1)
 
     def fetch(info, fmt, prefix):
-        opts = {**base_opts(), "format": fmt, "progress_hooks": [hook],
+        opts = {**base_opts(), **extra, "format": fmt, "progress_hooks": [hook],
                 "outtmpl": os.path.join(folder, prefix + ".%(ext)s")}
         with yt().YoutubeDL(opts) as ydl:
             ydl.process_ie_result(ydl.sanitize_info(info, remove_private_keys=False), download=True)
@@ -653,7 +702,7 @@ def _download(job_id, body):
 
     try:
         job["status"] = "analyzing"
-        opts = base_opts()
+        opts = {**base_opts(), **extra}
         if item:
             opts.update(noplaylist=False, playlist_items=str(item))
         with yt().YoutubeDL(opts) as ydl:

@@ -317,6 +317,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
       <p style="margin-top:6px"><span class="state" id="engineState"></span></p>
       <div class="row-btns"><button type="button" class="btn" id="update">Update now</button></div>
       <div class="about" style="margin-top:10px"><span>Installed version</span><b id="aboutEngine">…</b></div>
+      <div class="about"><span>YouTube security check</span><b id="aboutJs">…</b></div>
     </section>
     <section class="group">
       <h3>YouTube cookies</h3>
@@ -932,6 +933,7 @@ async function loadSettings(){
     $("#cookieState").textContent = c.cookies ? "Cookies imported." : "No cookies imported.";
     $("#cookieRemove").hidden = !c.cookies;
     $("#aboutEngine").textContent = `yt-dlp ${c.engine}`;
+    $("#aboutJs").textContent = c.js ? `Ready (${c.js})` : "Not available, some videos may fail";
     $("#setWifi").checked = !!c.settings.wifi_only;
     $("#setAuto").checked = !!c.settings.auto_update;
     const last = c.settings.last_update_check;
