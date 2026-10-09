@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
 
         web = WebView(this)
         setContentView(web)
-        web.setBackgroundColor(getColor(R.color.paper))
+        web.setBackgroundColor(getColor(R.color.background))
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -80,9 +80,10 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                web.evaluateJavascript(
-                    "(function(){var d=document.getElementById('settings');if(d&&d.open){d.close();return true}return false})()"
-                ) { closed -> if (closed != "true") moveTaskToBack(true) }
+                // the page handles its own back stack (sheet, video screen, tabs); leave the app only at the root
+                web.evaluateJavascript("window.handleBack ? handleBack() : false") { handled ->
+                    if (handled != "true") moveTaskToBack(true)
+                }
             }
         })
 
@@ -157,9 +158,8 @@ class MainActivity : ComponentActivity() {
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <style>
           html,body{height:100%;margin:0}
-          body{display:flex;align-items:center;justify-content:center;background:#EDEFF2;color:#5D6571;
+          body{display:flex;align-items:center;justify-content:center;background:#12161F;color:#8F98AB;
                font:500 16px system-ui,sans-serif;padding:24px;text-align:center}
-          @media (prefers-color-scheme:dark){body{background:#15181C;color:#9AA3AE}}
         </style></head><body>${Html.escapeHtml(message)}</body></html>
     """.trimIndent()
 }

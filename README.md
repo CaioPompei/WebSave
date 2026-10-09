@@ -5,9 +5,10 @@ Save videos from YouTube, Instagram, TikTok, X and hundreds of other sites strai
 ## Features
 
 - Paste a link or share it from any app with **Share → WebSave**
-- Pick the format (video or audio only) and the quality the video actually offers
-- Saves H.264 + AAC MP4 files to `Movies/WebSave`, ready for the gallery, WhatsApp and CapCut
-- **Send to…** hands the saved file to any app
+- Pick the format (video or audio only) and the quality the video actually offers, with file sizes
+- Saves H.264 + AAC MP4 files to `Movies/WebSave` (audio to `Music/WebSave`), ready for the gallery, WhatsApp and CapCut
+- **Library** keeps every download: open it, send it to another app, save it again in another quality or remove it
+- Downloads keep running in the background and can be cancelled
 - Import YouTube cookies and update the download engine (yt-dlp) from Settings
 
 ## Build
@@ -32,7 +33,8 @@ runtime (Deno, Node.js or QuickJS) for full YouTube support.
 
 | Path | What it is |
 | --- | --- |
-| `app/src/main/python/websave.py` | Local server, yt-dlp logic and the whole UI |
+| `app/src/main/python/websave.py` | Local server, yt-dlp logic, history |
+| `app/src/main/python/websave_ui.py` | The whole interface (one HTML page) |
 | `app/src/main/java/app/websave/MainActivity.kt` | WebView host, share intent, Python startup |
 | `app/src/main/java/app/websave/Native.kt` | Audio/video muxing and saving to the gallery |
 | `app/src/main/java/app/websave/JsBridge.kt` | Clipboard, open and share for the page |
