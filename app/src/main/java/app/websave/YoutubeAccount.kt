@@ -36,10 +36,14 @@ object YoutubeAccount {
         return true
     }
 
+    /** Forget the session; [then] runs once the cookies are really gone. */
     @JvmStatic
-    fun signOut() {
+    @JvmOverloads
+    fun signOut(then: (() -> Unit)? = null) {
         val manager = CookieManager.getInstance()
-        manager.removeAllCookies(null)
-        manager.flush()
+        manager.removeAllCookies {
+            manager.flush()
+            then?.invoke()
+        }
     }
 }

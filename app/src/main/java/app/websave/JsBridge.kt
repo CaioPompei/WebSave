@@ -89,6 +89,14 @@ class JsBridge(private val activity: Activity) {
     @JavascriptInterface
     fun youtubeSignOut() = activity.runOnUiThread { YoutubeAccount.signOut() }
 
+    /** Sign out, then open the sign-in page so another account can be picked. */
+    @JavascriptInterface
+    fun youtubeSwitchAccount() = activity.runOnUiThread {
+        YoutubeAccount.signOut {
+            activity.startActivity(Intent(activity, YoutubeLoginActivity::class.java))
+        }
+    }
+
     /** Close the quick-save sheet (or send the full app to the background). */
     @JavascriptInterface
     fun close() = activity.runOnUiThread {

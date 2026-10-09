@@ -99,16 +99,41 @@ button{cursor:pointer}
 .empty b{display:block;color:var(--text);font-size:16px;margin-bottom:4px}
 
 /* ---------- settings ---------- */
-.group{margin-top:18px;background:var(--surface);border-radius:18px;padding:18px}
-.group h3{margin:0 0 4px;font-size:16px}
-.group p{margin:0 0 14px;color:var(--muted);font-size:14px;line-height:1.5}
-.group .state{color:var(--text-2);font-weight:500}
 .row-btns{display:flex;gap:10px;flex-wrap:wrap}
 .btn{border:1px solid var(--line);border-radius:12px;background:var(--raised);color:var(--text);font-weight:600;font-size:15px;padding:11px 16px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn:disabled{opacity:.6;cursor:default}
-.about{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);padding:6px 0}
-.about b{color:var(--text-2);font-weight:500}
+.btn.sm{flex:none;background:none;font-weight:500;font-size:14px;padding:0 14px;height:36px;display:inline-flex;align-items:center}
+.btn.danger{color:var(--danger)}
+.set-section{margin-top:26px}
+.set-label{margin:0 0 8px 4px;font-size:13px;font-weight:600;color:var(--muted)}
+.set-card{background:var(--surface);border-radius:18px;overflow:hidden}
+.set-row{display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 16px;border:0;border-top:1px solid var(--raised);
+  background:none;text-align:left;color:inherit}
+.set-row:first-child{border-top:0}
+.set-row.tap{cursor:pointer}
+.set-row.tap:active{background:var(--raised)}
+.set-ico{width:36px;height:36px;border-radius:11px;background:var(--raised);color:var(--accent);display:grid;place-items:center;flex:none}
+.set-ico svg{width:18px;height:18px}
+.set-row .txt{flex:1;min-width:0}
+.set-row .txt b{display:block;font-size:15px;font-weight:500}
+.set-row .txt span{display:block;font-size:13px;color:var(--text-2);line-height:1.35;margin-top:2px}
+.set-row .val{flex:none;font-size:15px;color:var(--text-2);font-variant-numeric:tabular-nums}
+.set-row .chev{flex:none;width:18px;height:18px;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--success)}
+.dot.off{background:var(--muted)}
+.dot.bad{background:var(--danger)}
+.account{margin-top:18px;background:var(--surface);border-radius:18px;padding:18px}
+.account-top{display:flex;align-items:center;gap:14px}
+.account-avatar{width:48px;height:48px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
+.account-avatar svg{width:22px;height:22px}
+.account-top b{display:block;font-size:16px;font-weight:600}
+.account-top span{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2);margin-top:2px}
+.account p{margin:14px 0;font-size:13.5px;line-height:1.45;color:var(--text-2)}
+.set-foot{display:flex;align-items:center;gap:12px;margin:26px 4px 0}
+.set-foot svg{width:40px;height:40px;flex:none}
+.set-foot b{display:block;font-size:15px;font-weight:600}
+.set-foot span{display:block;font-size:13px;color:var(--muted)}
 .switch-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid var(--line-soft)}
 .switch-row:first-of-type{border-top:0}
 .switch-row .txt{flex:1}
@@ -233,7 +258,7 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
 }
 .no-flexgap .head>*+*,.no-flexgap .link>*+*,.no-flexgap .clip-card>*+*,.no-flexgap .q-row>*+*,.no-flexgap .switch-row>*+*,
 .no-flexgap .search>*+*,.no-flexgap .error>*+*,.no-flexgap .done-text>*+*,.no-flexgap .as-item>*+*,.no-flexgap .pl-item>*+*,
-.no-flexgap .q-msg>*+*,.no-flexgap .big-btn>*+*,.no-flexgap .pill-btn>*+*,.no-flexgap .cover-btn>*+*{margin-left:10px}
+.no-flexgap .q-msg>*+*,.no-flexgap .big-btn>*+*,.no-flexgap .set-row>*+*,.no-flexgap .account-top>*+*,.no-flexgap .set-foot>*+*,.no-flexgap .pill-btn>*+*,.no-flexgap .cover-btn>*+*{margin-left:10px}
 .no-flexgap .chips>*,.no-flexgap .pills>*,.no-flexgap .row-btns>*,.no-flexgap .filters>*,.no-flexgap .v-meta>*{margin:0 8px 8px 0}
 .no-flexgap .nav button>*+*{margin-top:3px}
 .webview-hint{margin-top:16px;padding:13px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);
@@ -300,51 +325,106 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
   <!-- ================= SETTINGS ================= -->
   <main class="screen" id="tab-settings" hidden>
     <h1 class="page-title" style="margin-top:4px">Settings</h1>
-    <section class="group">
-      <h3>Downloads</h3>
-      <label class="switch-row">
-        <span class="txt"><b>Only on Wi-Fi</b><span>Downloads wait for Wi-Fi instead of using mobile data.</span></span>
-        <input type="checkbox" class="switch" id="setWifi">
-      </label>
-      <p style="margin:8px 0 0" id="parallelText">Up to 2 downloads run at once; the rest wait in line and retry on their own if the connection drops.</p>
-    </section>
-    <section class="group">
-      <h3>Download engine</h3>
-      <label class="switch-row">
-        <span class="txt"><b>Update automatically</b><span>Checks once a week, so links keep working when sites change.</span></span>
-        <input type="checkbox" class="switch" id="setAuto">
-      </label>
-      <p style="margin-top:6px"><span class="state" id="engineState"></span></p>
-      <div class="row-btns"><button type="button" class="btn" id="update">Update now</button></div>
-      <div class="about" style="margin-top:10px"><span>Installed version</span><b id="aboutEngine">…</b></div>
-      <div class="about"><span>YouTube security check</span><b id="aboutJs">…</b></div>
-    </section>
-    <section class="group" id="accountGroup">
-      <h3>YouTube account</h3>
-      <p>Only needed when YouTube asks to confirm you're not a bot, or for age-restricted videos. <span class="state" id="accountState"></span></p>
-      <div class="row-btns" id="accountButtons">
-        <button type="button" class="btn primary" id="ytSignIn">Sign in to YouTube</button>
-        <button type="button" class="btn" id="ytSignOut" hidden>Sign out</button>
+
+    <section class="account" id="accountGroup" aria-label="YouTube account">
+      <div class="account-top">
+        <div class="account-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="M10 9.5v5l4.5-2.5-4.5-2.5z" fill="currentColor"/></svg></div>
+        <div><b>YouTube account</b><span><i class="dot off" id="accountDot"></i><span id="accountState">Not signed in</span></span></div>
       </div>
-      <p style="margin:12px 0 0;font-size:13px">YouTube may limit accounts used with download apps, so a secondary account is safest.</p>
-    </section>
-    <section class="group">
-      <h3>Cookies file</h3>
-      <p>Prefer a file? Export cookies.txt from a browser and import it here. <span class="state" id="cookieState"></span></p>
+      <p>Only used for videos that ask you to sign in, like age checks or "confirm you're not a bot". A secondary Google account is safest.</p>
       <div class="row-btns">
-        <label class="btn" for="cookieFile" tabindex="0" role="button" id="cookieLabel">Import cookies.txt</label>
-        <input type="file" id="cookieFile" accept=".txt,text/plain" hidden>
-        <button type="button" class="btn" id="cookieRemove" hidden>Remove</button>
+        <button type="button" class="btn primary" id="ytSignIn">Sign in to YouTube</button>
+        <button type="button" class="btn sm" id="ytSwitch" hidden>Switch account</button>
+        <button type="button" class="btn sm danger" id="ytSignOut" hidden>Sign out</button>
       </div>
     </section>
-    <section class="group" id="shortcutsGroup">
-      <h3>Shortcuts</h3>
-      <p>Share a link to WebSave from any app to save it without leaving that app. You can also add the <b>Save link</b> tile to your Quick Settings, or long-press the WebSave icon, to save whatever link you copied.</p>
+
+    <section class="set-section">
+      <h2 class="set-label">Downloads</h2>
+      <div class="set-card">
+        <label class="set-row tap">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a14 14 0 0 1 20 0"/><circle cx="12" cy="19.5" r=".8"/></svg></span>
+          <span class="txt"><b>Only on Wi-Fi</b><span>On mobile data, downloads wait in the queue</span></span>
+          <input type="checkbox" class="switch" id="setWifi">
+        </label>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></span>
+          <span class="txt"><b>Downloads at once</b><span id="parallelText">The rest wait in line and retry on their own</span></span>
+          <span class="val" id="parallelValue">2</span>
+        </div>
+      </div>
     </section>
-    <section class="group">
-      <h3>Saved files</h3>
-      <p>Videos, GIFs and covers go to the WebSave album in your gallery (Pictures/WebSave). Audio goes to Music/WebSave, with title, artist and cover art.</p>
+
+    <section class="set-section">
+      <h2 class="set-label">Download engine</h2>
+      <div class="set-card">
+        <label class="set-row tap">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4.5L20 16"/><path d="M20 20v-4h-4"/></svg></span>
+          <span class="txt"><b>Update automatically</b><span>Checks once a week, so links keep working</span></span>
+          <input type="checkbox" class="switch" id="setAuto">
+        </label>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg></span>
+          <span class="txt"><b id="aboutEngine">Engine</b><span id="engineState">Not checked yet</span></span>
+          <button type="button" class="btn sm" id="update">Update</button>
+        </div>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span>
+          <span class="txt"><b>YouTube security check</b><span id="aboutJs">Checking…</span></span>
+          <i class="dot off" id="jsDot" aria-hidden="true"></i>
+        </div>
+      </div>
     </section>
+
+    <section class="set-section">
+      <h2 class="set-label">Other sites</h2>
+      <div class="set-card">
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6"/></svg></span>
+          <span class="txt"><b>Cookies file</b><span id="cookieState">Not imported · for sites that need a login</span></span>
+          <label class="btn sm" for="cookieFile" tabindex="0" role="button" id="cookieLabel">Import</label>
+          <input type="file" id="cookieFile" accept=".txt,text/plain" hidden>
+          <button type="button" class="btn sm danger" id="cookieRemove" hidden>Remove</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="set-section" id="shortcutsGroup">
+      <h2 class="set-label">Ways to save</h2>
+      <div class="set-card">
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/></svg></span>
+          <span class="txt"><b>Share to WebSave</b><span>In any app, tap Share and pick WebSave</span></span>
+        </div>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span>
+          <span class="txt"><b>Quick Settings tile</b><span>Add "Save link" to save what you copied, without opening the app</span></span>
+        </div>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
+          <span class="txt"><b>App icon shortcut</b><span>Long-press the WebSave icon</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="set-section">
+      <h2 class="set-label">Saved files</h2>
+      <div class="set-card">
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5-4-2.5z"/></svg></span>
+          <span class="txt"><b>Videos, GIFs and covers</b><span>Pictures/WebSave · shows in your gallery</span></span>
+        </div>
+        <div class="set-row">
+          <span class="set-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span>
+          <span class="txt"><b>Audio</b><span>Music/WebSave · with title, artist and cover</span></span>
+        </div>
+      </div>
+    </section>
+
+    <div class="set-foot">
+      <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="24" fill="#1B2130"/><path d="M50 0V40" stroke="#EEF1F6" stroke-width="3.2" stroke-linecap="round"/><g stroke="#F2A93B" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M45 47L34 38L29 44M44 51L28 48L22 55M44 56L30 61L26 70M46 61L37 71L36 80"/><path d="M55 47L66 38L71 44M56 51L72 48L78 55M56 56L70 61L74 70M54 61L63 71L64 80"/></g><circle cx="50" cy="46" r="6.5" fill="#F2A93B"/><ellipse cx="50" cy="63" rx="11" ry="13" fill="#F2A93B"/></svg>
+      <div><b>WebSave</b><span id="appVersion">Powered by yt-dlp</span></div>
+    </div>
   </main>
 
   <!-- ================= VIDEO ================= -->
@@ -944,26 +1024,34 @@ $("#plDownload").addEventListener("click", async () => {
 });
 
 /* ---------- settings ---------- */
+function setDot(el, kind){ el.className = "dot" + (kind ? " " + kind : ""); }
 async function loadSettings(){
   try{
     const c = await api("/api/config");
-    $("#cookieState").textContent = c.cookies ? "Cookies imported." : "No file imported.";
+    const signed = !!c.youtube_signed_in;
     $("#accountGroup").hidden = !c.app;
-    $("#accountState").textContent = c.youtube_signed_in ? "Signed in." : "Not signed in.";
-    $("#ytSignIn").hidden = !!c.youtube_signed_in;
-    $("#ytSignOut").hidden = !c.youtube_signed_in;
+    $("#accountState").textContent = signed ? "Signed in · session refreshes on its own" : "Not signed in";
+    setDot($("#accountDot"), signed ? "" : "off");
+    $("#ytSignIn").hidden = signed;
+    $("#ytSwitch").hidden = !signed;
+    $("#ytSignOut").hidden = !signed;
+    $("#cookieState").textContent = c.cookies ? "Imported · used for every site" : "Not imported · for sites that need a login";
+    $("#cookieLabel").hidden = !!c.cookies;
     $("#cookieRemove").hidden = !c.cookies;
     $("#aboutEngine").textContent = `yt-dlp ${c.engine}`;
-    $("#aboutJs").textContent = c.js ? `Ready (${c.js})` : "Not available, some videos may fail";
+    $("#aboutJs").textContent = c.js ? `Ready · runs on ${c.js}` : "Not available · some videos may fail";
+    setDot($("#jsDot"), c.js ? "" : "bad");
     $("#setWifi").checked = !!c.settings.wifi_only;
     $("#setAuto").checked = !!c.settings.auto_update;
     const last = c.settings.last_update_check;
     $("#engineState").textContent = c.settings.engine_note ||
-      (last ? `Last checked ${new Date(last * 1000).toLocaleDateString()}.` : "Not checked yet.");
+      (last ? `Checked ${new Date(last * 1000).toLocaleDateString()}` : "Not checked yet");
     $("#shortcutsGroup").hidden = !c.app;
+    $("#parallelValue").textContent = c.parallel || 2;
     $("#parallelText").textContent = c.parallel === 1
-      ? "This phone runs one download at a time to stay smooth; the rest wait in line and retry on their own if the connection drops."
-      : `Up to ${c.parallel || 2} downloads run at once; the rest wait in line and retry on their own if the connection drops.`;
+      ? "Light mode keeps this phone smooth; the rest wait in line"
+      : "The rest wait in line and retry on their own";
+    $("#appVersion").textContent = c.version ? `Version ${c.version} · powered by yt-dlp` : "Powered by yt-dlp";
   }catch(e){}
 }
 async function saveSetting(key, value){ await postJSON("/api/settings", {[key]: value}).catch(()=>{}); }
@@ -974,22 +1062,24 @@ $("#cookieFile").addEventListener("change", async e => {
   const f = e.target.files[0]; if(!f) return;
   try{
     await api("/api/cookies", {method:"POST", body:await f.arrayBuffer()});
-    $("#cookieState").textContent = "Cookies imported. Try the link again."; $("#cookieRemove").hidden = false;
+    toast("Cookies imported. Try the link again.");
+    loadSettings();
   }catch(err){ $("#cookieState").textContent = err.message; }
   e.target.value = "";
 });
 $("#ytSignIn").addEventListener("click", () => native && native.youtubeLogin());
+$("#ytSwitch").addEventListener("click", () => native && native.youtubeSwitchAccount());
 $("#ytSignOut").addEventListener("click", () => { if(native){ native.youtubeSignOut(); setTimeout(loadSettings, 300); } });
 $("#cookieRemove").addEventListener("click", async () => { await api("/api/cookies", {method:"DELETE"}); loadSettings(); });
 $("#update").addEventListener("click", async () => {
-  const b = $("#update"); b.disabled = true; b.textContent = "Updating…";
+  const b = $("#update"); b.disabled = true; b.textContent = "Checking…";
   try{
     const r = await api("/api/update", {method:"POST"});
     $("#engineState").textContent = r.updated
-      ? `Version ${r.version} downloaded. Close and reopen WebSave to use it.`
-      : `You already have the latest version (${r.version}).`;
+      ? `Version ${r.version} downloaded · reopen WebSave to use it`
+      : "You have the latest version";
   }catch(e){ $("#engineState").textContent = e.message; }
-  b.disabled = false; b.textContent = "Update now";
+  b.disabled = false; b.textContent = "Update";
 });
 
 /* ---------- quick sheet: shared from another app ---------- */

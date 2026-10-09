@@ -43,6 +43,7 @@ CFG = {
     "yt_signed_in": None,                             # native (Android): signed in to YouTube inside the app?
     "yt_export": None,                                # native (Android): write that session as cookies.txt
     "light": False,                                   # older / low-memory phone: do less at once
+    "version": None,                                  # app version name (Android only)
 }
 
 
@@ -577,6 +578,7 @@ def api_config():
     imported = os.path.isfile(os.path.join(CFG["data_dir"], "cookies.txt"))
     return {"app": CFG["app"], "cookies": imported, "youtube_signed_in": signed_in, "ffmpeg": HAS_FFMPEG,
             "engine": version, "js": has_js, "light": CFG["light"], "parallel": MAX_PARALLEL,
+            "version": CFG["version"],
             "settings": settings()}, 200
 
 
@@ -1062,7 +1064,7 @@ def serve(port):
 
 # ---------------------------------------------------------------- Android
 
-def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
+def start(port, data_dir, cache_dir, native_lib_dir=None, light=False, app_version=None):
     """Called by the Android app (Chaquopy). light=True on older or low-memory phones."""
     global MAX_PARALLEL, SLOTS
     if light:
@@ -1077,7 +1079,7 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
     except Exception:
         pass
     qjs = os.path.join(native_lib_dir, "libqjs.so") if native_lib_dir else None
-    CFG.update(app=True, data_dir=data_dir, tmp_dir=cache_dir, light=bool(light),
+    CFG.update(app=True, data_dir=data_dir, tmp_dir=cache_dir, light=bool(light), version=app_version,
                qjs=qjs if qjs and os.access(qjs, os.X_OK) else None,
                merge=lambda v, a, out: native.merge(v, a, out),
                save=lambda path, name: native.save(path, name),

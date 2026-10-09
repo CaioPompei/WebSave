@@ -26,11 +26,15 @@ object Server {
             val free = ServerSocket(0).use { it.localPort }
             Python.getInstance().getModule("websave").callAttr(
                 "start", free, app.filesDir.absolutePath, app.cacheDir.absolutePath,
-                app.applicationInfo.nativeLibraryDir, isLightDevice(app)
+                app.applicationInfo.nativeLibraryDir, isLightDevice(app), appVersion(app)
             )
             port = free
         }
     }
+
+    private fun appVersion(context: Context): String? = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    } catch (_: Exception) { null }
 
     /**
      * Older or low-memory phones (under 3 GB of RAM, or Android Go): the engine runs one
