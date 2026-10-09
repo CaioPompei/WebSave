@@ -28,10 +28,16 @@ object Native {
 
     private val AUDIO_EXTENSIONS = setOf("m4a", "mp3", "aac", "opus", "ogg", "oga", "wav", "flac", "weba")
 
-    /** Mux H.264 video and AAC audio into one MP4 without re-encoding (replaces ffmpeg). */
+    /**
+     * Mux H.264 video and AAC audio into one MP4 without re-encoding (replaces ffmpeg).
+     * Samples are interleaved by timestamp, the way cameras write files, and the result is
+     * checked afterwards: a file the gallery can't read throws, so Python falls back to a single file.
+     */
     @JvmStatic
     fun merge(video: String, audio: String, output: String) {
         val muxer = MediaMuxer(output, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        class Source(val extractor: MediaExtractor, val track: Int, var done: Boolean = false)
+        var maxSample = 1 shl 20
         val sources = listOf(video to "video/", audio to "audio/").map { (path, mimePrefix) ->
             val extractor = MediaExtractor()
             extractor.setDataSource(path)
@@ -39,26 +45,59 @@ object Native {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith(mimePrefix) == true
             } ?: throw IOException("No $mimePrefix track found")
             extractor.selectTrack(index)
-            extractor to muxer.addTrack(extractor.getTrackFormat(index))
+            val format = extractor.getTrackFormat(index)
+            if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                maxSample = maxOf(maxSample, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+            }
+            if (mimePrefix == "video/" && format.containsKey("rotation-degrees")) {
+                muxer.setOrientationHint(format.getInteger("rotation-degrees"))
+            }
+            Source(extractor, muxer.addTrack(format))
         }
         try {
             muxer.start()
-            val buffer = ByteBuffer.allocate(8 * 1024 * 1024)
+            val buffer = ByteBuffer.allocate(maxOf(maxSample, 4 shl 20))
             val info = MediaCodec.BufferInfo()
-            for ((extractor, track) in sources) {
-                while (true) {
-                    val size = extractor.readSampleData(buffer, 0)
-                    if (size < 0) break
-                    val isKeyFrame = extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0
-                    info.set(0, size, extractor.sampleTime, if (isKeyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
-                    muxer.writeSampleData(track, buffer, info)
-                    extractor.advance()
-                }
+            while (true) {
+                // always write the sample with the earliest timestamp next
+                val next = sources.filter { !it.done }.minByOrNull { it.extractor.sampleTime } ?: break
+                val size = next.extractor.readSampleData(buffer, 0)
+                if (size < 0) { next.done = true; continue }
+                val isKeyFrame = next.extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0
+                info.set(0, size, next.extractor.sampleTime, if (isKeyFrame) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                muxer.writeSampleData(next.track, buffer, info)
+                if (!next.extractor.advance()) next.done = true
             }
             muxer.stop()
         } finally {
-            sources.forEach { it.first.release() }
+            sources.forEach { it.extractor.release() }
             muxer.release()
+        }
+        val meta = readVideoMeta(output)
+        if (meta == null || meta.durationMs <= 0) {
+            File(output).delete()
+            throw IOException("The merged file isn't playable")
+        }
+    }
+
+    private class VideoMeta(val durationMs: Long, val width: Int, val height: Int)
+
+    /** What the gallery will read from the file; null when Android can't read it as a video. */
+    private fun readVideoMeta(path: String): VideoMeta? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(path)
+            if (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") return null
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            var w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            var h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            if (rotation == 90 || rotation == 270) { val t = w; w = h; h = t }
+            VideoMeta(duration, w, h)
+        } catch (_: Exception) {
+            null
+        } finally {
+            retriever.release()
         }
     }
 
@@ -267,6 +306,8 @@ object Native {
                 put(MediaStore.MediaColumns.DATE_ADDED, now / 1000)
                 put(MediaStore.MediaColumns.DATE_MODIFIED, now / 1000)
             }
+            // galleries hide videos without a duration, so fill it in instead of relying on the scan
+            val meta = if (!isAudio && !isGif) readVideoMeta(path) else null
             val resolver = context.contentResolver
             uri = resolver.insert(collection, values) ?: throw IOException("Couldn't create the file in the gallery")
             resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
@@ -274,6 +315,21 @@ object Native {
             values.clear()
             values.put(MediaStore.MediaColumns.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
+            if (meta != null) {
+                // best effort: some Android versions only let the system scanner write these
+                try {
+                    val extra = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DURATION, meta.durationMs)
+                        if (meta.width > 0 && meta.height > 0) {
+                            put(MediaStore.MediaColumns.WIDTH, meta.width)
+                            put(MediaStore.MediaColumns.HEIGHT, meta.height)
+                        }
+                    }
+                    resolver.update(uri, extra, null, null)
+                } catch (_: Exception) {}
+            }
+            // ask the scanner to (re)read the file so the gallery lists it right away
+            MediaScannerConnection.scanFile(context, arrayOf(uri.toString()), arrayOf(mime), null)
         } else {
             val dir = File(Environment.getExternalStoragePublicDirectory(root), "WebSave").apply { mkdirs() }
             var target = File(dir, name)
