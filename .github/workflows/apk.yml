@@ -1,4 +1,4 @@
-name: Gerar APK
+name: Build APK
 
 on:
   push:
@@ -27,26 +27,46 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Compilar
+      # YouTube needs a JavaScript runtime to unlock every quality; build QuickJS for Android
+      - name: Build QuickJS for Android
+        run: |
+          set -o pipefail
+          TAG=$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/quickjs-ng/quickjs/releases/latest | jq -r .tag_name)
+          echo "QuickJS-ng $TAG"
+          git clone --depth 1 --branch "$TAG" https://github.com/quickjs-ng/quickjs.git qjs-src
+          cmake -S qjs-src -B qjs-build \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release \
+            2>&1 | tee qjs.log
+          cmake --build qjs-build --target qjs_exe -j4 2>&1 | tee -a qjs.log \
+            || cmake --build qjs-build --target qjs -j4 2>&1 | tee -a qjs.log
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          cp qjs-build/qjs app/src/main/jniLibs/arm64-v8a/libqjs.so
+          file app/src/main/jniLibs/arm64-v8a/libqjs.so
+
+      - name: Build
         run: |
           set -o pipefail
           gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
 
-      - name: Resumo do erro
+      - name: Error summary
         if: failure()
         run: |
           python3 - <<'PY'
-          import re
-          linhas = open("build.log", errors="ignore").read().splitlines()
-          chave = re.compile(r"(^e: |error:|ERROR|What went wrong|Caused by|Exception|^> |FAILED|not found|Could not)")
-          imp = [l for l in linhas if chave.search(l)]
-          blocos = [imp[-70:] or linhas[-70:], linhas[-40:]]
-          for i, b in enumerate(blocos):
-              msg = "\n".join(b)[:30000]
+          import os, re
+          lines = []
+          for name in ("qjs.log", "build.log"):
+              if os.path.exists(name):
+                  lines += open(name, errors="ignore").read().splitlines()
+          key = re.compile(r"(^e: |error:|ERROR|What went wrong|Caused by|Exception|^> |FAILED|not found|Could not)")
+          important = [l for l in lines if key.search(l)]
+          for i, block in enumerate([important[-70:] or lines[-70:], lines[-40:]]):
+              msg = "\n".join(block)[:30000]
               print(f"::error title=build{i}::" + msg.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
           PY
 
-      - name: Renomear
+      - name: Rename
         run: cp app/build/outputs/apk/release/app-release.apk WebSave.apk
 
       - uses: actions/upload-artifact@v4
@@ -54,7 +74,7 @@ jobs:
           name: WebSave
           path: WebSave.apk
 
-      - name: Publicar na página de Releases
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}

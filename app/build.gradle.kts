@@ -17,9 +17,9 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
-    // chave fixa: permite instalar versões novas por cima sem desinstalar
+    // fixed key: lets new versions install over the old one without uninstalling
     signingConfigs {
-        create("fixa") {
+        create("fixed") {
             storeFile = file("websave.keystore")
             storePassword = "websave"
             keyAlias = "websave"
@@ -27,10 +27,10 @@ android {
         }
     }
     buildTypes {
-        getByName("debug") { signingConfig = signingConfigs.getByName("fixa") }
+        getByName("debug") { signingConfig = signingConfigs.getByName("fixed") }
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("fixa")
+            signingConfig = signingConfigs.getByName("fixed")
         }
     }
     compileOptions {
@@ -38,6 +38,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    // QuickJS ships as libqjs.so so Android extracts it to an executable folder
+    packaging { jniLibs { useLegacyPackaging = true } }
     lint {
         abortOnError = false
         checkReleaseBuilds = false
@@ -49,6 +51,7 @@ chaquopy {
         version = "3.12"
         pip {
             install("yt-dlp")
+            install("yt-dlp-ejs")
             install("certifi")
         }
     }

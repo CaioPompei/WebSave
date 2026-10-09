@@ -8,11 +8,12 @@
 
     <application
         android:allowBackup="false"
+        android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="WebSave"
-        android:networkSecurityConfig="@xml/rede"
-        android:theme="@style/Tema">
+        android:networkSecurityConfig="@xml/network_security"
+        android:theme="@style/AppTheme">
 
         <activity
             android:name=".MainActivity"
@@ -24,8 +25,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- aparece no menu "Compartilhar" do YouTube, Instagram, TikTok... -->
-            <intent-filter android:label="Salvar com WebSave">
+            <!-- shows up in the Share menu of YouTube, Instagram, TikTok... -->
+            <intent-filter android:label="Save with WebSave">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -34,12 +35,12 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="app.websave.arquivos"
+            android:authorities="app.websave.files"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/caminhos" />
+                android:resource="@xml/file_paths" />
         </provider>
     </application>
 </manifest>

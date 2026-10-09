@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.Html
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -26,36 +27,36 @@ import kotlin.concurrent.thread
 class MainActivity : ComponentActivity() {
 
     companion object {
-        // o servidor Python vive enquanto o processo do app existir
-        @Volatile private var porta = 0
+        // the Python server lives as long as the app process does
+        @Volatile private var port = 0
     }
 
     private lateinit var web: WebView
-    private var escolhaArquivo: ValueCallback<Array<Uri>>? = null
-    private var linkPendente: String? = null
-    private var pronto = false
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingLink: String? = null
+    private var ready = false
 
-    private val seletor = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        escolhaArquivo?.onReceiveValue(uri?.let { arrayOf(it) })
-        escolhaArquivo = null
+    private val filePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        fileCallback?.onReceiveValue(uri?.let { arrayOf(it) })
+        fileCallback = null
     }
-    private val pedirPermissao = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    private val requestPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Nativo.contexto = applicationContext
+        Native.context = applicationContext
 
         web = WebView(this)
         setContentView(web)
-        web.setBackgroundColor(getColor(R.color.papel))
+        web.setBackgroundColor(getColor(R.color.paper))
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             allowFileAccess = false
             mediaPlaybackRequiresUserGesture = true
         }
-        web.addJavascriptInterface(Ponte(this), "WebSaveAndroid")
+        web.addJavascriptInterface(JsBridge(this), "WebSaveAndroid")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == "127.0.0.1") return false
@@ -67,12 +68,12 @@ class MainActivity : ComponentActivity() {
             override fun onShowFileChooser(
                 view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams
             ): Boolean {
-                escolhaArquivo?.onReceiveValue(null)
-                escolhaArquivo = callback
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
                 return try {
-                    seletor.launch("*/*"); true
+                    filePicker.launch("*/*"); true
                 } catch (e: Exception) {
-                    escolhaArquivo = null; false
+                    fileCallback = null; false
                 }
             }
         }
@@ -80,83 +81,85 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 web.evaluateJavascript(
-                    "(function(){var d=document.getElementById('ajustes');if(d&&d.open){d.close();return true}return false})()"
-                ) { fechou -> if (fechou != "true") moveTaskToBack(true) }
+                    "(function(){var d=document.getElementById('settings');if(d&&d.open){d.close();return true}return false})()"
+                ) { closed -> if (closed != "true") moveTaskToBack(true) }
             }
         })
 
         if (Build.VERSION.SDK_INT < 29 &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
-            pedirPermissao.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            requestPermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
-        linkPendente = linkDe(intent)
-        web.loadDataWithBaseURL(null, telaSimples("Iniciando o WebSave…"), "text/html", "utf-8", null)
-        iniciarServidor()
+        pendingLink = linkFrom(intent)
+        web.loadDataWithBaseURL(null, plainScreen("Starting WebSave…"), "text/html", "utf-8", null)
+        startServer()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val link = linkDe(intent) ?: return
-        if (pronto) web.evaluateJavascript("receberLink(${JSONObject.quote(link)})", null)
-        else linkPendente = link
+        val link = linkFrom(intent) ?: return
+        if (ready) web.evaluateJavascript("receiveLink(${JSONObject.quote(link)})", null)
+        else pendingLink = link
     }
 
-    private fun iniciarServidor() = thread {
+    private fun startServer() = thread {
         try {
-            if (porta == 0) {
+            if (port == 0) {
                 if (!Python.isStarted()) Python.start(AndroidPlatform(applicationContext))
-                val livre = ServerSocket(0).use { it.localPort }
-                Python.getInstance().getModule("websave")
-                    .callAttr("start", livre, filesDir.absolutePath, cacheDir.absolutePath)
-                porta = livre
+                val free = ServerSocket(0).use { it.localPort }
+                Python.getInstance().getModule("websave").callAttr(
+                    "start", free, filesDir.absolutePath, cacheDir.absolutePath,
+                    applicationInfo.nativeLibraryDir
+                )
+                port = free
             }
-            val base = "http://127.0.0.1:$porta/"
-            val ok = esperar(base + "api/ping")
+            val base = "http://127.0.0.1:$port/"
+            val ok = waitFor(base + "api/ping")
             runOnUiThread {
                 if (ok) {
-                    pronto = true
-                    val q = linkPendente?.let { "?url=" + Uri.encode(it) } ?: ""
-                    linkPendente = null
-                    web.loadUrl(base + q)
+                    ready = true
+                    val query = pendingLink?.let { "?url=" + Uri.encode(it) } ?: ""
+                    pendingLink = null
+                    web.loadUrl(base + query)
                 } else {
-                    web.loadDataWithBaseURL(null, telaSimples("O WebSave não conseguiu iniciar. Feche e abra o app de novo."), "text/html", "utf-8", null)
+                    web.loadDataWithBaseURL(null, plainScreen("WebSave couldn't start. Close and reopen the app."), "text/html", "utf-8", null)
                 }
             }
         } catch (e: Throwable) {
             runOnUiThread {
-                web.loadDataWithBaseURL(null, telaSimples("Falha ao iniciar: ${e.message}"), "text/html", "utf-8", null)
+                web.loadDataWithBaseURL(null, plainScreen("Startup failed: ${e.message}"), "text/html", "utf-8", null)
             }
         }
     }
 
-    private fun esperar(url: String): Boolean {
+    private fun waitFor(url: String): Boolean {
         repeat(120) {
             try {
-                val c = URL(url).openConnection() as HttpURLConnection
-                c.connectTimeout = 500
-                c.readTimeout = 1000
-                if (c.responseCode == 200) return true
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connectTimeout = 500
+                connection.readTimeout = 1000
+                if (connection.responseCode == 200) return true
             } catch (_: Exception) {}
             Thread.sleep(250)
         }
         return false
     }
 
-    private fun linkDe(i: Intent?): String? {
-        if (i?.action != Intent.ACTION_SEND) return null
-        val texto = i.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-        return Regex("https?://\\S+").find(texto)?.value
+    private fun linkFrom(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
+        return Regex("https?://\\S+").find(text)?.value
     }
 
-    private fun telaSimples(msg: String) = """
+    private fun plainScreen(message: String) = """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <style>
           html,body{height:100%;margin:0}
           body{display:flex;align-items:center;justify-content:center;background:#EDEFF2;color:#5D6571;
                font:500 16px system-ui,sans-serif;padding:24px;text-align:center}
           @media (prefers-color-scheme:dark){body{background:#15181C;color:#9AA3AE}}
-        </style></head><body>${android.text.Html.escapeHtml(msg)}</body></html>
+        </style></head><body>${Html.escapeHtml(message)}</body></html>
     """.trimIndent()
 }
