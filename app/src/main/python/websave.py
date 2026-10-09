@@ -23,7 +23,11 @@ from urllib.parse import quote, urlparse
 
 JOBS = {}
 HISTORY_LOCK = threading.Lock()
+SETTINGS_LOCK = threading.Lock()
 HISTORY_LIMIT = 300
+MAX_PARALLEL = 2                       # downloads running at the same time; the rest wait in line
+SLOTS = threading.Semaphore(MAX_PARALLEL)
+DEFAULT_SETTINGS = {"wifi_only": False, "auto_update": True, "last_update_check": 0, "engine_note": ""}
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 CFG = {
     "app": False,                                     # True when running inside the APK
@@ -33,7 +37,34 @@ CFG = {
     "save": None,                                     # native (Android) save-to-gallery function
     "qjs": None,                                      # QuickJS binary bundled with the APK
     "frames": None,                                   # native (Android) frame extractor for GIFs
+    "trim": None,                                     # native (Android) cutter for a time range
+    "on_wifi": None,                                  # native (Android) check for an unmetered network
 }
+
+
+# ---------------------------------------------------------------- settings
+
+def _settings_file():
+    return os.path.join(CFG["data_dir"], "settings.json")
+
+
+def settings():
+    try:
+        with open(_settings_file(), encoding="utf-8") as f:
+            return {**DEFAULT_SETTINGS, **json.load(f)}
+    except (OSError, ValueError):
+        return dict(DEFAULT_SETTINGS)
+
+
+def save_settings(**changes):
+    with SETTINGS_LOCK:
+        current = settings()
+        current.update({k: v for k, v in changes.items() if k in DEFAULT_SETTINGS})
+        os.makedirs(CFG["data_dir"], exist_ok=True)
+        with open(_settings_file() + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(current, f)
+        os.replace(_settings_file() + ".tmp", _settings_file())
+        return current
 
 # ---------------------------------------------------------------- engine (yt-dlp)
 
@@ -82,6 +113,11 @@ def base_opts():
         # keep the download time as the file date, so it shows up on top of the gallery
         "updatetime": False,
         "cachedir": os.path.join(CFG["data_dir"], "cache"),
+        # faster: several pieces in parallel, and big chunks so YouTube doesn't throttle
+        "concurrent_fragment_downloads": 4,
+        "http_chunk_size": 10 * 1024 * 1024,
+        # resilient: retry when the connection drops instead of failing
+        "retries": 10, "fragment_retries": 10, "extractor_retries": 3, "socket_timeout": 30,
         # YouTube needs a JavaScript runtime to unlock every quality; these are its solver scripts
         "remote_components": ["ejs:github"],
     }
@@ -115,6 +151,18 @@ def explain_error(e):
     if "requested format is not available" in low:
         return ("This quality isn't available for this video. Pick another one.", None)
     return (msg or "Something went wrong while reading the link.", None)
+
+
+def is_transient(e):
+    """Network hiccups worth retrying, as opposed to errors that will fail again."""
+    low = str(e).lower()
+    return any(k in low for k in ("timed out", "timeout", "connection reset", "connection aborted", "temporarily",
+                                  "http error 5", "incompleteread", "urlopen error", "network is unreachable",
+                                  "remote end closed"))
+
+
+def thumbnail_of(entry):
+    return entry.get("thumbnail") or ((entry.get("thumbnails") or [{}])[-1] or {}).get("url")
 
 
 def _first_video(info):
@@ -261,19 +309,24 @@ GIF_FPS = 12
 GIF_MAX_FRAMES = 200
 
 
-def make_gif(source, target, width):
-    """Turn a silent clip into a real animated GIF that plays in any gallery."""
-    if source.lower().endswith(".gif"):
+def make_gif(source, target, width, start=None, end=None):
+    """Turn a silent clip (or a range of it) into a real animated GIF that plays in any gallery."""
+    if source.lower().endswith(".gif") and start is None:
         os.replace(source, target)
         return
     if HAS_FFMPEG:
         graph = (f"fps={GIF_FPS},scale='min({width},iw)':-2:flags=lanczos,split[a][b];"
                  "[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4")
-        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-vf", graph, "-loop", "0", target], check=True)
+        cut = (["-ss", f"{start:.3f}"] if start else []) + (["-t", f"{end - (start or 0):.3f}"] if end else [])
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *cut, "-i", source, "-vf", graph, "-loop", "0", target],
+                       check=True)
         return
     if CFG["frames"]:
         raw = source + ".rgba"
-        w, h, count, delay = (int(x) for x in str(CFG["frames"](source, raw, width, GIF_FPS, GIF_MAX_FRAMES)).split("|"))
+        start_ms = int((start or 0) * 1000)
+        end_ms = int(end * 1000) if end else -1
+        w, h, count, delay = (int(x) for x in str(
+            CFG["frames"](source, raw, width, GIF_FPS, GIF_MAX_FRAMES, start_ms, end_ms)).split("|"))
         try:
             encode_gif(raw, w, h, count, delay, target)
         finally:
@@ -308,6 +361,60 @@ def encode_gif(raw, width, height, count, delay_ms, target):
 
     out = [fr.quantize(palette=palette, dither=Image.Dither.FLOYDSTEINBERG) for fr in frames()]
     out[0].save(target, save_all=True, append_images=out[1:], duration=max(20, delay_ms), loop=0, disposal=1)
+
+
+# ---------------------------------------------------------------- trim and tags
+
+def trim_media(source, target, start, end):
+    """Keep only [start, end] seconds. Cuts land on the nearest keyframe, without re-encoding."""
+    if CFG["trim"]:
+        CFG["trim"](source, target, int(start * 1000), int(end * 1000))
+    elif HAS_FFMPEG:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", source,
+                        "-t", f"{end - start:.3f}", "-c", "copy", "-avoid_negative_ts", "make_zero",
+                        "-movflags", "+faststart", target], check=True)
+    else:
+        raise RuntimeError("Trimming needs ffmpeg. Install it with: pkg install ffmpeg")
+
+
+def _cover_image(info):
+    """A JPEG or PNG thumbnail (what music players accept as cover art), as (bytes, is_png)."""
+    candidates = [t for t in (info.get("thumbnails") or []) if t.get("url")]
+    candidates.sort(key=lambda t: (t.get("preference") or 0, t.get("width") or 0))
+    urls = [t["url"] for t in reversed(candidates)] + [info.get("thumbnail") or ""]
+    for url in urls:
+        path = url.split("?")[0].lower()
+        if not path.endswith((".jpg", ".jpeg", ".png")):
+            continue
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as r:
+                return r.read(), path.endswith(".png")
+        except Exception:
+            continue
+    return None, False
+
+
+def tag_audio(path, info):
+    """Write title, artist and cover art so music players show more than a file name."""
+    if not path.lower().endswith((".m4a", ".mp4")):
+        return
+    try:
+        from mutagen.mp4 import MP4, MP4Cover
+        audio = MP4(path)
+        if info.get("title"):
+            audio["\xa9nam"] = [info["title"]]
+        artist = info.get("artist") or info.get("uploader") or info.get("channel")
+        if artist:
+            audio["\xa9ART"] = [artist]
+        if info.get("album"):
+            audio["\xa9alb"] = [info["album"]]
+        data, is_png = _cover_image(info)
+        if data:
+            audio["covr"] = [MP4Cover(data, MP4Cover.FORMAT_PNG if is_png else MP4Cover.FORMAT_JPEG)]
+        audio.save()
+    except Exception:
+        pass  # tags are a nice extra; never fail the download over them
 
 
 # ---------------------------------------------------------------- history
@@ -348,7 +455,7 @@ def remove_history(item_id):
 
 SITES = {"Youtube": "YouTube", "Twitter": "X", "TikTok": "TikTok", "Instagram": "Instagram",
          "Facebook": "Facebook", "Vimeo": "Vimeo", "Reddit": "Reddit", "Generic": None}
-ACTIVE = ("analyzing", "downloading", "merging", "converting", "saving")
+ACTIVE = ("waiting_wifi", "queued", "retrying", "analyzing", "downloading", "merging", "converting", "trimming", "saving")
 
 
 def api_config():
@@ -358,7 +465,7 @@ def api_config():
         version = "?"
     has_js = bool(CFG["qjs"]) or any(shutil.which(x) for x in ("deno", "node", "bun", "qjs"))
     return {"app": CFG["app"], "cookies": bool(cookies_path()), "ffmpeg": HAS_FFMPEG,
-            "engine": version, "js": has_js}, 200
+            "engine": version, "js": has_js, "settings": settings()}, 200
 
 
 def api_info(body):
@@ -366,8 +473,25 @@ def api_info(body):
     if not url:
         return {"error": "Paste a link first."}, 400
     try:
-        with yt().YoutubeDL(base_opts()) as ydl:
-            video = _first_video(ydl.extract_info(url, download=False))
+        with yt().YoutubeDL({**base_opts(), "extract_flat": "in_playlist"}) as ydl:
+            info = ydl.extract_info(url, download=False)
+        entries = [e for e in (info.get("entries") or []) if e] if info.get("_type") == "playlist" else []
+        if len(entries) > 1:
+            return {
+                "playlist": True,
+                "url": url,
+                "title": info.get("title") or "Playlist",
+                "channel": info.get("uploader") or info.get("channel"),
+                "site": SITES.get(info.get("extractor_key"), info.get("extractor_key")),
+                "count": len(entries),
+                "entries": [{"index": i + 1, "title": e.get("title") or f"Item {i + 1}",
+                             "thumbnail": thumbnail_of(e), "duration": e.get("duration")}
+                            for i, e in enumerate(entries[:100])],
+            }, 200
+        video = _first_video(info)
+        if video.get("_type") == "url" and video.get("url"):
+            with yt().YoutubeDL(base_opts()) as ydl:
+                video = _first_video(ydl.extract_info(video["url"], download=False))
         options = quality_options(video)
         gif_like = looks_like_gif(video)
         notice = None
@@ -381,7 +505,7 @@ def api_info(body):
         return {
             "url": url,
             "title": video.get("title"),
-            "thumbnail": video.get("thumbnail"),
+            "thumbnail": thumbnail_of(video),
             "duration": video.get("duration"),
             "channel": video.get("uploader") or video.get("channel"),
             "site": SITES.get(video.get("extractor_key"), video.get("extractor_key")),
@@ -396,8 +520,49 @@ def api_info(body):
         return {"error": text, "code": code}, 400
 
 
-def _run_download(job_id, url, kind, quality):
+def _run_download(job_id, body):
+    """Wait for Wi-Fi (if asked) and a free slot, then download, retrying network hiccups."""
     job = JOBS[job_id]
+
+    def check_cancel():
+        if job.get("cancel"):
+            raise yt().utils.DownloadCancelled("Cancelled")
+
+    try:
+        while settings()["wifi_only"] and CFG["on_wifi"] and not CFG["on_wifi"]():
+            check_cancel()
+            job["status"] = "waiting_wifi"
+            time.sleep(3)
+        job["status"] = "queued"
+        while not SLOTS.acquire(timeout=1):
+            check_cancel()
+        try:
+            for attempt in range(3):
+                try:
+                    _download(job_id, body)
+                    break
+                except Exception as e:
+                    if job.get("cancel") or not is_transient(e) or attempt == 2:
+                        raise
+                    job.update(status="retrying", progress=0)
+                    time.sleep(3 * (attempt + 1))
+        finally:
+            SLOTS.release()
+    except Exception as e:
+        if job.get("cancel"):
+            job.update(status="cancelled")
+        else:
+            text, code = explain_error(e)
+            job.update(status="error", error=text, code=code)
+
+
+def _download(job_id, body):
+    job = JOBS[job_id]
+    url, kind, quality = body.get("url", ""), body.get("kind", "video"), body.get("quality", "best")
+    item = body.get("item")
+    trim = body.get("trim") or None
+    start = float(trim["start"]) if trim else None
+    end = float(trim["end"]) if trim else None
     folder = tempfile.mkdtemp(prefix="websave_", dir=CFG["tmp_dir"])
     span = {"start": 0.0, "weight": 100.0}
 
@@ -430,9 +595,14 @@ def _run_download(job_id, url, kind, quality):
 
     try:
         job["status"] = "analyzing"
-        with yt().YoutubeDL(base_opts()) as ydl:
+        opts = base_opts()
+        if item:
+            opts.update(noplaylist=False, playlist_items=str(item))
+        with yt().YoutubeDL(opts) as ydl:
             info = _first_video(ydl.extract_info(url, download=False))
         name = yt().utils.sanitize_filename(info.get("title") or "video")[:120].strip() or "video"
+        if trim:
+            name = f"{name} ({_clock(start)}-{_clock(end)})"
         mode, selection = choose(info, kind, quality)
 
         job["status"] = "downloading"
@@ -442,13 +612,14 @@ def _run_download(job_id, url, kind, quality):
             job.update(status="converting", progress=85)
             final = os.path.join(folder, name + ".gif")
             try:
-                make_gif(clip, final, int(quality) if str(quality).isdigit() else 480)
+                make_gif(clip, final, int(quality) if str(quality).isdigit() else 480, start, end)
                 os.remove(clip)
             except Exception:
                 # never lose the download: keep the clip as a video and say so
                 final = os.path.join(folder, name + os.path.splitext(clip)[1])
                 os.replace(clip, final)
                 job["warning"] = "This clip couldn't be turned into a GIF, so it was saved as a video."
+            trim = None  # already applied while making the GIF
         elif mode == "merge":
             span.update(start=0, weight=85)
             video = fetch(info, selection[0], "v")
@@ -474,6 +645,14 @@ def _run_download(job_id, url, kind, quality):
         else:
             final = fetch_single(info, selection)
 
+        if trim:
+            job.update(status="trimming", progress=99)
+            cut = os.path.join(folder, "trimmed" + os.path.splitext(final)[1])
+            trim_media(final, cut, start, end)
+            os.replace(cut, final)
+        if kind == "audio":
+            tag_audio(final, info)
+
         filename = os.path.basename(final)
         mime = mimetypes.guess_type(filename)[0] or ("audio/mp4" if filename.endswith(".m4a") else "video/mp4")
         if filename.endswith(".gif"):
@@ -492,25 +671,82 @@ def _run_download(job_id, url, kind, quality):
             "id": job_id, "saved_at": int(time.time()), **job["meta"],
             "kind": kind, "label": job["label"], "size": size, "filename": filename, "mime": mime,
             "uri": job.get("uri"), "location": job.get("location"), "path": job.get("path"),
+            "item": item, "warning": job.get("warning"),
         })
-    except Exception as e:
-        if job.get("cancel"):
-            job.update(status="cancelled")
-        else:
-            text, code = explain_error(e)
-            job.update(status="error", error=text, code=code)
+    except Exception:
         if not job.get("path"):
             shutil.rmtree(folder, ignore_errors=True)
+        raise
+
+
+def _clock(seconds):
+    """Time for a file name, without ':' (not allowed on every storage): 5s, 1m05s, 1h02m05s."""
+    seconds = int(seconds or 0)
+    h, m, s = seconds // 3600, seconds % 3600 // 60, seconds % 60
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    return f"{m}m{s:02d}s" if m else f"{s}s"
 
 
 def api_download(body):
     job_id = uuid.uuid4().hex
     meta = {k: body.get(k) for k in ("url", "title", "thumbnail", "duration", "channel", "site")}
-    JOBS[job_id] = {"status": "analyzing", "progress": 0, "meta": meta, "kind": body.get("kind", "video"),
-                    "label": body.get("label") or "", "started": int(time.time())}
-    threading.Thread(target=_run_download, daemon=True,
-                     args=(job_id, body.get("url", ""), body.get("kind", "video"), body.get("quality", "best"))).start()
+    JOBS[job_id] = {"status": "queued", "progress": 0, "meta": meta, "kind": body.get("kind", "video"),
+                    "label": body.get("label") or "", "started": time.time()}
+    threading.Thread(target=_run_download, args=(job_id, body), daemon=True).start()
     return {"id": job_id}, 200
+
+
+def api_jobs():
+    """Every download of this session with its state (the notification service polls this)."""
+    keys = ("status", "progress", "error", "warning", "uri", "mime", "location", "filename", "kind")
+    jobs = [{"id": jid, "title": j["meta"].get("title"), **{k: j.get(k) for k in keys}}
+            for jid, j in sorted(JOBS.items(), key=lambda kv: kv[1]["started"])]
+    return {"jobs": jobs}, 200
+
+
+def api_thumbnail(body):
+    """Save a video's cover image to the gallery (or hand it to the browser on desktop)."""
+    url = body.get("url") or ""
+    if not url:
+        return {"error": "This video has no cover image."}, 400
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20, context=_ssl_context()) as r:
+            data, ctype = r.read(), r.headers.get("Content-Type", "")
+        ext = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}.get(ctype.split(";")[0], ".jpg")
+        name = yt().utils.sanitize_filename(body.get("title") or "cover")[:110].strip() or "cover"
+        folder = tempfile.mkdtemp(prefix="websave_", dir=CFG["tmp_dir"])
+        path = os.path.join(folder, f"{name} (cover){ext}")
+        with open(path, "wb") as f:
+            f.write(data)
+        if CFG["save"]:
+            uri, location = str(CFG["save"](path, os.path.basename(path))).split("|", 1)
+            shutil.rmtree(folder, ignore_errors=True)
+            return {"uri": uri, "location": location}, 200
+        job_id = uuid.uuid4().hex
+        JOBS[job_id] = {"status": "done", "path": path, "filename": os.path.basename(path), "mime": ctype or "image/jpeg",
+                        "meta": {}, "kind": "image", "label": "", "started": time.time()}
+        return {"id": job_id}, 200
+    except Exception as e:
+        return {"error": f"Couldn't save the cover: {e}"}, 500
+
+
+def api_set_settings(body):
+    allowed = {k: bool(v) for k, v in body.items() if k in ("wifi_only", "auto_update")}
+    return {"settings": save_settings(**allowed)}, 200
+
+
+def auto_update():
+    """Once a week, quietly fetch a newer engine. It's used from the next launch."""
+    time.sleep(20)
+    s = settings()
+    if not s["auto_update"] or time.time() - s["last_update_check"] < 7 * 86400:
+        return
+    result, status = api_update_engine()
+    note = f"Version {result['version']} downloaded automatically; it's used from the next launch." \
+        if status == 200 and result.get("updated") else ""
+    save_settings(last_update_check=int(time.time()), engine_note=note)
 
 
 def api_status(job_id):
@@ -528,8 +764,8 @@ def api_cancel(job_id):
 
 
 def api_history():
-    active = [{"id": jid, "active": True, "progress": j.get("progress", 0), "kind": j["kind"],
-               "label": j["label"], "saved_at": j["started"], **j["meta"]}
+    active = [{"id": jid, "active": True, "status": j["status"], "progress": j.get("progress", 0), "kind": j["kind"],
+               "label": j["label"], "saved_at": int(j["started"]), **j["meta"]}
               for jid, j in JOBS.items() if j.get("status") in ACTIVE]
     active.sort(key=lambda i: i["saved_at"], reverse=True)
     items = [{k: v for k, v in i.items() if k != "path"} for i in load_history()]
@@ -636,6 +872,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(api_config())
         elif path == "/api/history":
             self._json(api_history())
+        elif path == "/api/jobs":
+            self._json(api_jobs())
         elif path.startswith("/api/status/"):
             self._json(api_status(last))
         elif path.startswith("/api/file/"):
@@ -665,7 +903,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(api_import_cookies(self._body()))
         elif path == "/api/update":
             self._body()
-            self._json(api_update_engine())
+            result = api_update_engine()
+            save_settings(last_update_check=int(time.time()), engine_note="")
+            self._json(result)
+        elif path == "/api/thumbnail":
+            self._json(api_thumbnail(self._json_body()))
+        elif path == "/api/settings":
+            self._json(api_set_settings(self._json_body()))
         else:
             self._json(({"error": "Not found."}, 404))
 
@@ -701,9 +945,12 @@ def start(port, data_dir, cache_dir, native_lib_dir=None):
                qjs=qjs if qjs and os.access(qjs, os.X_OK) else None,
                merge=lambda v, a, out: native.merge(v, a, out),
                save=lambda path, name: native.save(path, name),
-               frames=lambda src, out, width, fps, limit: native.gifFrames(src, out, width, fps, limit))
+               frames=lambda src, out, width, fps, limit, start, end: native.gifFrames(src, out, width, fps, limit, start, end),
+               trim=lambda src, out, start, end: native.trim(src, out, start, end),
+               on_wifi=lambda: bool(native.isOnWifi()))
     threading.Thread(target=serve, args=(port,), daemon=True).start()
     threading.Thread(target=yt, daemon=True).start()  # warm up the engine
+    threading.Thread(target=auto_update, daemon=True).start()
 
 
 # ---------------------------------------------------------------- UI
