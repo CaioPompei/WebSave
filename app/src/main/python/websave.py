@@ -40,6 +40,8 @@ CFG = {
     "trim": None,                                     # native (Android) cutter for a time range
     "on_wifi": None,                                  # native (Android) check for an unmetered network
     "audio": None,                                    # native (Android) audio extractor
+    "yt_signed_in": None,                             # native (Android): signed in to YouTube inside the app?
+    "yt_export": None,                                # native (Android): write that session as cookies.txt
     "light": False,                                   # older / low-memory phone: do less at once
 }
 
@@ -98,7 +100,18 @@ def _ssl_context():
         return ssl.create_default_context()
 
 
+_SESSION = {"written": 0.0}
+
+
 def cookies_path():
+    """Cookies for yt-dlp: the in-app YouTube sign-in first (refreshed every few minutes), else an imported file."""
+    if CFG["yt_signed_in"] and CFG["yt_signed_in"]():
+        session = os.path.join(CFG["data_dir"], "youtube-session.txt")
+        if time.time() - _SESSION["written"] > 300 or not os.path.isfile(session):
+            if CFG["yt_export"](session):
+                _SESSION["written"] = time.time()
+        if os.path.isfile(session):
+            return session
     for p in (
         os.path.join(CFG["data_dir"], "cookies.txt"),
         os.path.expanduser("~/cookies.txt"),
@@ -139,9 +152,9 @@ def explain_error(e):
     low = msg.lower()
     if "not a bot" in low or "sign in to confirm" in low:
         if cookies_path():
-            return ("YouTube asked for verification and rejected the imported cookies. "
-                    "Export a fresh cookies.txt and import it again in Settings.", "cookies")
-        return ("YouTube asked for account verification. Import your cookies in Settings and try again.", "cookies")
+            return ("YouTube asked for verification and didn't accept your session. "
+                    "Sign out and sign in to YouTube again in Settings.", "cookies")
+        return ("YouTube asked to confirm you're not a bot. Sign in to YouTube and try again.", "cookies")
     if "unsupported url" in low:
         return ("This link isn't supported. Check that it opens a video in your browser.", None)
     if "private" in low:
@@ -560,7 +573,9 @@ def api_config():
     except Exception:
         version = "?"
     has_js = js_status()
-    return {"app": CFG["app"], "cookies": bool(cookies_path()), "ffmpeg": HAS_FFMPEG,
+    signed_in = bool(CFG["yt_signed_in"] and CFG["yt_signed_in"]())
+    imported = os.path.isfile(os.path.join(CFG["data_dir"], "cookies.txt"))
+    return {"app": CFG["app"], "cookies": imported, "youtube_signed_in": signed_in, "ffmpeg": HAS_FFMPEG,
             "engine": version, "js": has_js, "light": CFG["light"], "parallel": MAX_PARALLEL,
             "settings": settings()}, 200
 
@@ -1055,6 +1070,7 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
         SLOTS = threading.Semaphore(1)
     from java import jclass
     native = jclass("app.websave.Native")
+    account = jclass("app.websave.YoutubeAccount")
     try:
         import certifi
         os.environ.setdefault("SSL_CERT_FILE", certifi.where())
@@ -1068,7 +1084,9 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
                frames=lambda src, out, width, fps, limit, start, end: native.gifFrames(src, out, width, fps, limit, start, end),
                trim=lambda src, out, start, end: native.trim(src, out, start, end),
                on_wifi=lambda: bool(native.isOnWifi()),
-               audio=lambda src, base: native.extractAudio(src, base))
+               audio=lambda src, base: native.extractAudio(src, base),
+               yt_signed_in=lambda: bool(account.isSignedIn()),
+               yt_export=lambda path: bool(account.exportCookies(path)))
     threading.Thread(target=serve, args=(port,), daemon=True).start()
     threading.Thread(target=yt, daemon=True).start()  # warm up the engine
     threading.Thread(target=auto_update, daemon=True).start()

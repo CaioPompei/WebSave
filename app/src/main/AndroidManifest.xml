@@ -54,6 +54,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".YoutubeLoginActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density" />
+
         <service
             android:name=".DownloadService"
             android:exported="false"

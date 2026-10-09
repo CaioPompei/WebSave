@@ -80,6 +80,15 @@ class JsBridge(private val activity: Activity) {
         }
     }
 
+    /** Sign in to YouTube inside the app (for videos that need an account). */
+    @JavascriptInterface
+    fun youtubeLogin() = activity.runOnUiThread {
+        activity.startActivity(Intent(activity, YoutubeLoginActivity::class.java))
+    }
+
+    @JavascriptInterface
+    fun youtubeSignOut() = activity.runOnUiThread { YoutubeAccount.signOut() }
+
     /** Close the quick-save sheet (or send the full app to the background). */
     @JavascriptInterface
     fun close() = activity.runOnUiThread {

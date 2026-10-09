@@ -319,11 +319,20 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
       <div class="about" style="margin-top:10px"><span>Installed version</span><b id="aboutEngine">…</b></div>
       <div class="about"><span>YouTube security check</span><b id="aboutJs">…</b></div>
     </section>
+    <section class="group" id="accountGroup">
+      <h3>YouTube account</h3>
+      <p>Only needed when YouTube asks to confirm you're not a bot, or for age-restricted videos. <span class="state" id="accountState"></span></p>
+      <div class="row-btns" id="accountButtons">
+        <button type="button" class="btn primary" id="ytSignIn">Sign in to YouTube</button>
+        <button type="button" class="btn" id="ytSignOut" hidden>Sign out</button>
+      </div>
+      <p style="margin:12px 0 0;font-size:13px">YouTube may limit accounts used with download apps, so a secondary account is safest.</p>
+    </section>
     <section class="group">
-      <h3>YouTube cookies</h3>
-      <p>Use these when YouTube asks for account verification. Export a cookies.txt file with YouTube open and import it here. <span class="state" id="cookieState"></span></p>
+      <h3>Cookies file</h3>
+      <p>Prefer a file? Export cookies.txt from a browser and import it here. <span class="state" id="cookieState"></span></p>
       <div class="row-btns">
-        <label class="btn primary" for="cookieFile" tabindex="0" role="button" id="cookieLabel">Import cookies.txt</label>
+        <label class="btn" for="cookieFile" tabindex="0" role="button" id="cookieLabel">Import cookies.txt</label>
         <input type="file" id="cookieFile" accept=".txt,text/plain" hidden>
         <button type="button" class="btn" id="cookieRemove" hidden>Remove</button>
       </div>
@@ -494,7 +503,9 @@ function tint(id){ let h = 0; for(const c of String(id)) h = (h*31 + c.charCodeA
 const KIND_NAME = {audio:"Audio", gif:"GIF"};
 function showError(box, msg, code){
   box.querySelector("span").textContent = msg;
-  box.querySelector("[data-open-settings]").hidden = code !== "cookies";
+  const action = box.querySelector("[data-open-settings]");
+  action.hidden = code !== "cookies";
+  action.textContent = native && native.youtubeLogin ? "Sign in" : "Settings";
   box.hidden = false;
 }
 let notifAsked = false;
@@ -527,7 +538,9 @@ $$("#nav button").forEach(b => b.addEventListener("click", () => showTab(b.datas
 $("#seeAll").addEventListener("click", () => showTab("library"));
 $("#vBack").addEventListener("click", () => showTab(state.tab));
 $("#plBack").addEventListener("click", () => showTab(state.tab));
-$$("[data-open-settings]").forEach(b => b.addEventListener("click", () => showTab("settings")));
+$$("[data-open-settings]").forEach(b => b.addEventListener("click", () => {
+  if(native && native.youtubeLogin) native.youtubeLogin(); else showTab("settings");
+}));
 
 /* ---------- clipboard card ---------- */
 function checkClipboard(){
@@ -541,7 +554,11 @@ function checkClipboard(){
   $("#clipSave").onclick = () => { $("#clipCard").hidden = true; receiveLink(link); };
 }
 $("#clipDismiss").addEventListener("click", () => { $("#clipCard").hidden = true; });
-window.onAppFocus = function(){ if(QUICK) quickFocus(); else checkClipboard(); };
+window.onAppFocus = function(){
+  if(QUICK){ quickFocus(); return; }
+  checkClipboard();
+  if(state.view === "tabs" && state.tab === "settings") loadSettings();  // e.g. back from signing in
+};
 
 /* ---------- library ---------- */
 function cardHTML(item){
@@ -930,7 +947,11 @@ $("#plDownload").addEventListener("click", async () => {
 async function loadSettings(){
   try{
     const c = await api("/api/config");
-    $("#cookieState").textContent = c.cookies ? "Cookies imported." : "No cookies imported.";
+    $("#cookieState").textContent = c.cookies ? "Cookies imported." : "No file imported.";
+    $("#accountGroup").hidden = !c.app;
+    $("#accountState").textContent = c.youtube_signed_in ? "Signed in." : "Not signed in.";
+    $("#ytSignIn").hidden = !!c.youtube_signed_in;
+    $("#ytSignOut").hidden = !c.youtube_signed_in;
     $("#cookieRemove").hidden = !c.cookies;
     $("#aboutEngine").textContent = `yt-dlp ${c.engine}`;
     $("#aboutJs").textContent = c.js ? `Ready (${c.js})` : "Not available, some videos may fail";
@@ -957,6 +978,8 @@ $("#cookieFile").addEventListener("change", async e => {
   }catch(err){ $("#cookieState").textContent = err.message; }
   e.target.value = "";
 });
+$("#ytSignIn").addEventListener("click", () => native && native.youtubeLogin());
+$("#ytSignOut").addEventListener("click", () => { if(native){ native.youtubeSignOut(); setTimeout(loadSettings, 300); } });
 $("#cookieRemove").addEventListener("click", async () => { await api("/api/cookies", {method:"DELETE"}); loadSettings(); });
 $("#update").addEventListener("click", async () => {
   const b = $("#update"); b.disabled = true; b.textContent = "Updating…";
