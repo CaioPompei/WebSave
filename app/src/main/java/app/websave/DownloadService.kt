@@ -99,7 +99,7 @@ class DownloadService : Service() {
 
     private fun showProgress(active: List<JSONObject>) {
         val labels = mapOf("waiting_wifi" to "Waiting for Wi-Fi", "queued" to "Waiting in line",
-            "retrying" to "Retrying", "merging" to "Merging", "converting" to "Creating GIF",
+            "retrying" to "Retrying", "merging" to "Merging", "converting" to "Converting",
             "trimming" to "Trimming", "saving" to "Saving")
         val notification = if (active.size == 1) {
             val job = active[0]

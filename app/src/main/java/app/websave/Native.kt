@@ -175,6 +175,53 @@ object Native {
         }
     }
 
+    /**
+     * Pull the sound out of a video without re-encoding. AAC goes into an .m4a, Opus/Vorbis into
+     * a .webm. Returns the file written ([outputBase] plus its extension); throws "NO_AUDIO" when
+     * the video has no sound at all.
+     */
+    @JvmStatic
+    fun extractAudio(input: String, outputBase: String): String {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(input)
+            val index = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: throw IOException("NO_AUDIO")
+            extractor.selectTrack(index)
+            val format = extractor.getTrackFormat(index)
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+            val (container, ext) = when (mime) {
+                "audio/opus", "audio/vorbis" -> MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM to ".webm"
+                else -> MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4 to ".m4a"
+            }
+            val output = outputBase + ext
+            val muxer = MediaMuxer(output, container)
+            try {
+                val track = muxer.addTrack(format)
+                muxer.start()
+                val size = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE) else 0
+                val buffer = ByteBuffer.allocate(maxOf(size, 1 shl 20))
+                val info = MediaCodec.BufferInfo()
+                var first = -1L
+                while (true) {
+                    val read = extractor.readSampleData(buffer, 0)
+                    if (read < 0) break
+                    if (first < 0) first = extractor.sampleTime
+                    info.set(0, read, maxOf(0L, extractor.sampleTime - first), MediaCodec.BUFFER_FLAG_KEY_FRAME)
+                    muxer.writeSampleData(track, buffer, info)
+                    if (!extractor.advance()) break
+                }
+                muxer.stop()
+            } finally {
+                muxer.release()
+            }
+            return output
+        } finally {
+            extractor.release()
+        }
+    }
+
     /** True on Wi-Fi, Ethernet or any network the user marked as unmetered. */
     @JvmStatic
     fun isOnWifi(): Boolean {

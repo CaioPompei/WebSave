@@ -457,7 +457,7 @@ const ICON_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="#A7E3C4" stroke-wi
 const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="#FF8A80" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>';
 const ACTIVE = ["waiting_wifi","queued","retrying","analyzing","downloading","merging","converting","trimming","saving"];
 const STATUS_LABEL = {waiting_wifi:"Waiting for Wi-Fi", queued:"Waiting in line", retrying:"Connection dropped, retrying",
-  analyzing:"Preparing", downloading:"Downloading", merging:"Merging audio and video", converting:"Creating GIF",
+  analyzing:"Preparing", downloading:"Downloading", merging:"Merging audio and video", converting:"Converting",
   trimming:"Trimming", saving:"Saving to your gallery"};
 const state = {tab:"save", view:"tabs", video:null, kinds:["video"], kind:"video", quality:null, preset:null,
   trim:{on:false, start:0, end:0}, job:null, timer:null, items:[], historyTimer:null, sheetItem:null,
@@ -678,7 +678,8 @@ const KIND_LABELS = {video:"Video", gif:"GIF", audio:"Audio only"};
 function availableKinds(d){
   const kinds = d.gif_like ? ["gif", "video"] : ["video"];
   if(!d.gif_like && (!d.duration || d.duration <= 60)) kinds.push("gif");
-  if(d.has_audio !== false) kinds.push("audio");
+  // always offered: when there's no separate audio stream, the sound is taken from the video
+  kinds.push("audio");
   return kinds;
 }
 function bestUnder(limit){
@@ -693,7 +694,7 @@ function presetsFor(d){
   ];
   if(d.duration && d.duration > 60) list.push({id:"clip", title:"60 s clip", sub:"720p, first minute",
     apply:() => ({kind:"video", quality:bestUnder(720), trim:{start:0, end:60}})});
-  if(d.has_audio !== false) list.push({id:"music", title:"Music", sub:"Audio with cover", apply:() => ({kind:"audio", quality:"best", trim:null})});
+  list.push({id:"music", title:"Music", sub:"Audio with cover", apply:() => ({kind:"audio", quality:"best", trim:null})});
   return list;
 }
 function openVideo(d){
@@ -727,7 +728,8 @@ function renderOptions(){
   $("#vKinds").innerHTML = state.kinds.map(k =>
     `<button type="button" role="radio" aria-checked="${k === state.kind}" data-kind="${k}">${KIND_LABELS[k]}</button>`).join("");
   let rows;
-  if(state.kind === "audio") rows = [{value:"best", label:"Best audio", tag:"M4A with cover", size:d.audio_size}];
+  if(state.kind === "audio") rows = [{value:"best", label:"Best audio",
+    tag:d.has_audio === false ? "This clip may be silent" : "M4A with cover", size:d.audio_size}];
   else if(state.kind === "gif") rows = [{value:"480", label:"480 px wide", tag:"Sharper", size:null},
                                         {value:"320", label:"320 px wide", tag:"Smaller file", size:null}];
   else if(d.qualities.length) rows = d.qualities.slice(0,5).map(q => ({value:q.value, label:resLabel(q.res), tag:resTag(q.res), size:q.size}));
@@ -829,7 +831,8 @@ $("#cancel").addEventListener("click", async () => {
 });
 function paintBusy(s){
   const p = Math.max(0, Math.min(100, s.progress || 0));
-  $("#busyLabel").textContent = STATUS_LABEL[s.status] || "Preparing";
+  $("#busyLabel").textContent = s.status === "converting"
+    ? (state.kind === "audio" ? "Extracting audio" : "Creating GIF") : (STATUS_LABEL[s.status] || "Preparing");
   const size = state.job && state.job.size;
   $("#busyAmount").textContent = s.status === "downloading" ? (size ? `${bytes(size*p/100) || "0 MB"} of ${bytes(size)}` : `${Math.floor(p)}%`) : "";
   $("#busyBar").style.width = (["analyzing","queued","waiting_wifi","retrying"].includes(s.status) ? 2 : p) + "%";
@@ -995,7 +998,7 @@ async function quickStart(link){
   const buttons = [];
   if(d.gif_like) buttons.push(["gif", "480", "GIF", "GIF"]);
   buttons.push(["video", best ? best.value : "best", best ? `Video ${resLabel(best.res)}` : "Video", best ? resLabel(best.res) : "Original"]);
-  if(!d.gif_like && d.has_audio !== false) buttons.push(["audio", "best", "Audio", "Audio"]);
+  buttons.push(["audio", "best", "Audio", "Audio"]);
   quickRender(`<div class="q-row">${thumb}<div><div class="t">${esc(d.title || "Untitled video")}</div><div class="m">${esc(meta)}</div></div></div>
     <div class="q-grid">${buttons.map((b, i) => `<button class="big-btn${i ? " ghost" : ""}" data-i="${i}">${esc(b[2])}</button>`).join("")}</div>
     <button class="q-more" id="qFull">More options: trim, quality, GIF</button>`);
