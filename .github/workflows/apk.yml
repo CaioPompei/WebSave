@@ -28,7 +28,23 @@ jobs:
           gradle-version: "8.7"
 
       - name: Compilar
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Resumo do erro
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import re
+          linhas = open("build.log", errors="ignore").read().splitlines()
+          chave = re.compile(r"(^e: |error:|ERROR|What went wrong|Caused by|Exception|^> |FAILED|not found|Could not)")
+          imp = [l for l in linhas if chave.search(l)]
+          blocos = [imp[-70:] or linhas[-70:], linhas[-40:]]
+          for i, b in enumerate(blocos):
+              msg = "\n".join(b)[:30000]
+              print(f"::error title=build{i}::" + msg.replace("%", "%25").replace("\r", "").replace("\n", "%0A"))
+          PY
 
       - name: Renomear
         run: cp app/build/outputs/apk/release/app-release.apk WebSave.apk
