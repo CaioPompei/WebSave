@@ -65,45 +65,165 @@ object Native {
     /**
      * Decode evenly spaced frames of a clip, scaled to [maxWidth], and write them as raw RGBA
      * back to back into [output]. Python turns them into a GIF. Returns "width|height|count|delayMs".
+     * Uses the hardware decoder first and falls back to MediaMetadataRetriever.
      */
     @JvmStatic
     fun gifFrames(video: String, output: String, maxWidth: Int, fps: Int, maxFrames: Int): String {
+        val decoded = try {
+            FileOutputStream(output).buffered(1 shl 20).use { decodeFrames(video, it, maxWidth, fps, maxFrames) }
+        } catch (_: Exception) {
+            null
+        }
+        if (decoded != null && decoded.count > 0) return decoded.toString()
+        val retrieved = FileOutputStream(output).buffered(1 shl 20).use { retrieveFrames(video, it, maxWidth, fps, maxFrames) }
+        if (retrieved.count == 0) throw IOException("Couldn't read frames from this clip")
+        return retrieved.toString()
+    }
+
+    private class Frames(var width: Int = 0, var height: Int = 0, var count: Int = 0, var delayMs: Int = 100) {
+        override fun toString() = "$width|$height|$count|$delayMs"
+    }
+
+    private fun targetSize(srcWidth: Int, srcHeight: Int, maxWidth: Int): Pair<Int, Int> {
+        val scale = min(1.0, maxWidth.toDouble() / srcWidth)
+        val w = ((srcWidth * scale).roundToInt() / 2 * 2).coerceAtLeast(2)
+        val h = ((srcHeight * scale).roundToInt() / 2 * 2).coerceAtLeast(2)
+        return w to h
+    }
+
+    /** Sequential decode with MediaCodec: robust for streamed clips (fragmented MP4, MPEG-TS). */
+    private fun decodeFrames(video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int): Frames {
+        val result = Frames()
+        val extractor = MediaExtractor()
+        var codec: MediaCodec? = null
+        try {
+            extractor.setDataSource(video)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: return result
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+            val stepUs = maxOf(1_000_000L / fps, if (durationUs > 0) durationUs / maxFrames else 0L)
+            result.delayMs = (stepUs / 1000).toInt()
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+            codec.configure(format, null, null, 0)
+            codec.start()
+
+            val info = MediaCodec.BufferInfo()
+            var inputDone = false
+            var nextUs = -1L
+            var firstUs = -1L
+            var rgba: ByteArray? = null
+            var idleAfterInput = 0
+            while (result.count < maxFrames) {
+                if (!inputDone) {
+                    val inIndex = codec.dequeueInputBuffer(10_000)
+                    if (inIndex >= 0) {
+                        val size = extractor.readSampleData(codec.getInputBuffer(inIndex)!!, 0)
+                        if (size < 0) {
+                            codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            codec.queueInputBuffer(inIndex, 0, size, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
+                    }
+                }
+                val outIndex = codec.dequeueOutputBuffer(info, 10_000)
+                if (outIndex < 0) {
+                    // a decoder that stops answering after the last input should not hang the app
+                    if (inputDone && ++idleAfterInput > 300) break
+                    continue
+                }
+                val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                if (info.size > 0) {
+                    if (firstUs < 0) { firstUs = info.presentationTimeUs; nextUs = firstUs }
+                    if (info.presentationTimeUs >= nextUs) {
+                        codec.getOutputImage(outIndex)?.use { image ->
+                            val crop = image.cropRect
+                            if (result.width == 0) {
+                                val (w, h) = targetSize(crop.width(), crop.height(), maxWidth)
+                                result.width = w; result.height = h
+                                rgba = ByteArray(w * h * 4)
+                            }
+                            yuvToRgba(image, result.width, result.height, rgba!!)
+                            out.write(rgba!!)
+                            result.count++
+                            nextUs += stepUs
+                        }
+                    }
+                }
+                codec.releaseOutputBuffer(outIndex, false)
+                if (eos) break
+            }
+        } finally {
+            try { codec?.stop() } catch (_: Exception) {}
+            codec?.release()
+            extractor.release()
+        }
+        return result
+    }
+
+    /** Convert a YUV_420_888 image to RGBA at the target size (nearest-neighbour scaling, BT.601). */
+    private fun yuvToRgba(image: android.media.Image, width: Int, height: Int, dst: ByteArray) {
+        val crop = image.cropRect
+        val (yPlane, uPlane, vPlane) = image.planes.let { Triple(it[0], it[1], it[2]) }
+        val yBuf = yPlane.buffer; val uBuf = uPlane.buffer; val vBuf = vPlane.buffer
+        val yRow = yPlane.rowStride; val yPix = yPlane.pixelStride
+        val uRow = uPlane.rowStride; val uPix = uPlane.pixelStride
+        val vRow = vPlane.rowStride; val vPix = vPlane.pixelStride
+        var o = 0
+        for (ty in 0 until height) {
+            val sy = crop.top + ty * crop.height() / height
+            for (tx in 0 until width) {
+                val sx = crop.left + tx * crop.width() / width
+                val y = (yBuf.get(sy * yRow + sx * yPix).toInt() and 0xFF) - 16
+                val u = (uBuf.get((sy / 2) * uRow + (sx / 2) * uPix).toInt() and 0xFF) - 128
+                val v = (vBuf.get((sy / 2) * vRow + (sx / 2) * vPix).toInt() and 0xFF) - 128
+                val c = 1192 * maxOf(y, 0)
+                dst[o++] = ((c + 1634 * v) shr 10).coerceIn(0, 255).toByte()
+                dst[o++] = ((c - 833 * v - 400 * u) shr 10).coerceIn(0, 255).toByte()
+                dst[o++] = ((c + 2066 * u) shr 10).coerceIn(0, 255).toByte()
+                dst[o++] = 0xFF.toByte()
+            }
+        }
+    }
+
+    /** Fallback: ask MediaMetadataRetriever for each frame. */
+    private fun retrieveFrames(video: String, out: java.io.OutputStream, maxWidth: Int, fps: Int, maxFrames: Int): Frames {
+        val result = Frames()
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(video)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             val count = ((durationMs * fps) / 1000).toInt().coerceIn(1, maxFrames)
             val stepUs = if (count > 1) durationMs * 1000 / count else 0L
-            var width = 0
-            var height = 0
-            var written = 0
-            FileOutputStream(output).buffered(1 shl 20).use { out ->
-                for (i in 0 until count) {
-                    val frame = retriever.getFrameAtTime(i * stepUs, MediaMetadataRetriever.OPTION_CLOSEST) ?: continue
-                    if (width == 0) {
-                        val scale = min(1.0, maxWidth.toDouble() / frame.width)
-                        width = (frame.width * scale).roundToInt().coerceAtLeast(2)
-                        height = (frame.height * scale).roundToInt().coerceAtLeast(2)
-                    }
-                    val scaled = if (frame.width == width && frame.height == height) frame
-                        else Bitmap.createScaledBitmap(frame, width, height, true)
-                    val argb = if (scaled.config == Bitmap.Config.ARGB_8888) scaled
-                        else scaled.copy(Bitmap.Config.ARGB_8888, false)
-                    val buffer = ByteBuffer.allocate(width * height * 4)
-                    argb.copyPixelsToBuffer(buffer)
-                    out.write(buffer.array())
-                    written++
-                    if (argb !== frame) argb.recycle()
-                    if (scaled !== frame && scaled !== argb) scaled.recycle()
-                    frame.recycle()
+            result.delayMs = if (count > 1) (stepUs / 1000).toInt() else 100
+            for (i in 0 until count) {
+                val t = i * stepUs
+                val frame = retriever.getFrameAtTime(t, MediaMetadataRetriever.OPTION_CLOSEST)
+                    ?: retriever.getFrameAtTime(t, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    ?: continue
+                if (result.width == 0) {
+                    val (w, h) = targetSize(frame.width, frame.height, maxWidth)
+                    result.width = w; result.height = h
                 }
+                val scaled = Bitmap.createScaledBitmap(frame, result.width, result.height, true)
+                val argb = if (scaled.config == Bitmap.Config.ARGB_8888) scaled else scaled.copy(Bitmap.Config.ARGB_8888, false)
+                val buffer = ByteBuffer.allocate(result.width * result.height * 4)
+                argb.copyPixelsToBuffer(buffer)
+                out.write(buffer.array())
+                result.count++
+                if (argb !== scaled) argb.recycle()
+                if (scaled !== frame) scaled.recycle()
+                frame.recycle()
             }
-            if (written == 0) throw IOException("Couldn't read frames from this clip")
-            val delayMs = if (count > 1) (stepUs / 1000).toInt() else 100
-            return "$width|$height|$written|$delayMs"
         } finally {
             retriever.release()
         }
+        return result
     }
 
     /** Copy the file into the gallery's WebSave album (audio: Music/WebSave) and return "uri|folder". */

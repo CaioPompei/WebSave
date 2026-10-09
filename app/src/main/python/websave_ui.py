@@ -512,7 +512,7 @@ async function track(){
   if(s.status === "done"){
     setAction("done");
     if(native && s.uri){
-      $("#doneText").textContent = s.mime === "image/gif"
+      $("#doneText").textContent = s.warning ? `${s.warning} It's in ${s.location}.` : s.mime === "image/gif"
         ? `Saved to ${s.location}. It plays as an animated GIF in your gallery.`
         : `Saved to ${s.location}. It's in your gallery and ready for CapCut.`;
       $("#doneNative").hidden = false;

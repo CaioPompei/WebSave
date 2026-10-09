@@ -200,7 +200,9 @@ def choose(info, kind, quality):
         # the source clip only needs to be a little sharper than the GIF itself
         clips = [f for f in fmts if _has_video(f) and resolution(f) <= 720]  # 0 = size unknown
         if clips:
-            best = max(clips, key=lambda f: (f.get("ext") == "mp4", (f.get("vcodec") or "").startswith(("avc1", "h264")),
+            # a plain file decodes more reliably on phones than a stream (m3u8 / MPEG-TS)
+            best = max(clips, key=lambda f: (not str(f.get("protocol") or "").startswith("m3u8"),
+                                             f.get("ext") == "mp4", (f.get("vcodec") or "").startswith(("avc1", "h264")),
                                              resolution(f), f.get("tbr") or 0))
             return ("single", best["format_id"])
         return ("single", "bv*[height<=720]/b[height<=720]/b")
@@ -439,9 +441,14 @@ def _run_download(job_id, url, kind, quality):
             clip = fetch(info, selection, "c")
             job.update(status="converting", progress=85)
             final = os.path.join(folder, name + ".gif")
-            make_gif(clip, final, int(quality) if str(quality).isdigit() else 480)
-            if os.path.exists(clip):
+            try:
+                make_gif(clip, final, int(quality) if str(quality).isdigit() else 480)
                 os.remove(clip)
+            except Exception:
+                # never lose the download: keep the clip as a video and say so
+                final = os.path.join(folder, name + os.path.splitext(clip)[1])
+                os.replace(clip, final)
+                job["warning"] = "This clip couldn't be turned into a GIF, so it was saved as a video."
         elif mode == "merge":
             span.update(start=0, weight=85)
             video = fetch(info, selection[0], "v")
