@@ -39,6 +39,7 @@ CFG = {
     "frames": None,                                   # native (Android) frame extractor for GIFs
     "trim": None,                                     # native (Android) cutter for a time range
     "on_wifi": None,                                  # native (Android) check for an unmetered network
+    "audio": None,                                    # native (Android) audio extractor
     "light": False,                                   # older / low-memory phone: do less at once
 }
 
@@ -198,7 +199,8 @@ def _has_audio(f):
 
 
 def _audio_only(f):
-    return f.get("vcodec") == "none" and f.get("acodec") not in (None, "none")
+    # a stream with no video is audio even when the site doesn't name its codec (X does this)
+    return f.get("vcodec") == "none" and f.get("acodec") != "none"
 
 
 def _mergeable_video(f):
@@ -212,8 +214,9 @@ def _size(f):
 
 def has_audio(info):
     fmts = info.get("formats") or []
-    return any(f.get("acodec") not in (None, "none") for f in fmts) or (
-        not looks_like_gif(info) and any(f.get("acodec") is None for f in fmts))
+    if any(f.get("acodec") not in (None, "none") for f in fmts) or any(_audio_only(f) for f in fmts):
+        return True
+    return not looks_like_gif(info) and any(f.get("acodec") is None for f in fmts)
 
 
 def looks_like_gif(info):
@@ -258,8 +261,15 @@ def choose(info, kind, quality):
 
     if kind == "audio":
         audios = [f for f in fmts if _audio_only(f)]
-        pool = [f for f in audios if f.get("ext") == "m4a"] or audios
-        return ("single", max(pool, key=bitrate)["format_id"] if pool else "ba/b")
+        if audios:
+            pool = [f for f in audios if f.get("ext") == "m4a"] or [f for f in audios if f.get("ext") in ("mp4", "aac")] or audios
+            return ("single", max(pool, key=bitrate)["format_id"])
+        # no separate audio stream: take the lightest version that has sound and pull the audio out of it
+        with_sound = [f for f in fmts if _has_video(f) and f.get("acodec") != "none"]
+        if with_sound:
+            lightest = min(with_sound, key=lambda f: (resolution(f) or 10 ** 6, f.get("tbr") or 0))
+            return ("single", lightest["format_id"])
+        return ("single", "ba/b")
 
     combined = [f for f in fmts if _has_video(f) and _has_audio(f) and fits(f)]
     best_combined = max(
@@ -382,6 +392,45 @@ def trim_media(source, target, start, end):
                         "-movflags", "+faststart", target], check=True)
     else:
         raise RuntimeError("Trimming needs ffmpeg. Install it with: pkg install ffmpeg")
+
+
+AUDIO_EXTS = (".m4a", ".mp3", ".aac", ".opus", ".ogg", ".oga", ".flac", ".wav", ".weba")
+
+
+class NoAudio(RuntimeError):
+    def __init__(self):
+        super().__init__("This video has no sound, so there's nothing to save as audio.")
+
+
+def to_audio(path):
+    """Make sure an 'audio only' download is an audio file: pull the sound out of a video if needed."""
+    if path.lower().endswith(AUDIO_EXTS):
+        return path
+    base = os.path.splitext(path)[0] + " (audio)"
+    if CFG["audio"]:
+        try:
+            out = str(CFG["audio"](path, base))
+        except Exception as e:
+            if "NO_AUDIO" in str(e):
+                raise NoAudio() from None
+            raise
+    elif HAS_FFMPEG:
+        if shutil.which("ffprobe"):
+            probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+                                    "-of", "csv=p=0", path], capture_output=True, text=True)
+            if not probe.stdout.strip():
+                raise NoAudio()
+        out = base + ".m4a"
+        copy = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-vn", "-c:a", "copy", out])
+        if copy.returncode != 0:  # not AAC inside: convert it
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-vn", "-c:a", "aac", "-b:a", "192k", out],
+                           check=True)
+    else:
+        raise RuntimeError("Saving only the audio of this video needs ffmpeg. Install it with: pkg install ffmpeg")
+    os.remove(path)
+    final = out.replace(" (audio)", "")
+    os.replace(out, final)
+    return final
 
 
 def _cover_image(info):
@@ -518,7 +567,8 @@ def api_info(body):
             "channel": video.get("uploader") or video.get("channel"),
             "site": SITES.get(video.get("extractor_key"), video.get("extractor_key")),
             "qualities": options,
-            "audio_size": estimated_size(video, "audio", "best"),
+            # only show a size when there's a separate audio stream (otherwise it would be the video's size)
+            "audio_size": estimated_size(video, "audio", "best") if any(_audio_only(f) for f in video.get("formats") or []) else None,
             "gif_like": gif_like,
             "has_audio": has_audio(video),
             "notice": notice,
@@ -659,6 +709,8 @@ def _download(job_id, body):
             trim_media(final, cut, start, end)
             os.replace(cut, final)
         if kind == "audio":
+            job.update(status="converting" if not final.lower().endswith(AUDIO_EXTS) else job["status"])
+            final = to_audio(final)
             tag_audio(final, info)
 
         filename = os.path.basename(final)
@@ -966,7 +1018,8 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False):
                save=lambda path, name: native.save(path, name),
                frames=lambda src, out, width, fps, limit, start, end: native.gifFrames(src, out, width, fps, limit, start, end),
                trim=lambda src, out, start, end: native.trim(src, out, start, end),
-               on_wifi=lambda: bool(native.isOnWifi()))
+               on_wifi=lambda: bool(native.isOnWifi()),
+               audio=lambda src, base: native.extractAudio(src, base))
     threading.Thread(target=serve, args=(port,), daemon=True).start()
     threading.Thread(target=yt, daemon=True).start()  # warm up the engine
     threading.Thread(target=auto_update, daemon=True).start()
