@@ -413,6 +413,196 @@ object Native {
         return result
     }
 
+    // ------------------------------------------------------------ local tools (websave_tools.py)
+
+    /** "durationMs|width|height|bitrate|hasAudio" of a video, with width/height as displayed (rotation applied). */
+    @JvmStatic
+    fun probe(path: String): String {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(path)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            var w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            var h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            if (rotation == 90 || rotation == 270) { val t = w; w = h; h = t }
+            var bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull() ?: 0L
+            if (bitrate <= 0 && duration > 0) bitrate = File(path).length() * 8000 / duration
+            val audio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
+            return "$duration|$w|$h|$bitrate|${if (audio) 1 else 0}"
+        } catch (_: Exception) {
+            return "0|0|0|0|0"
+        } finally {
+            retriever.release()
+        }
+    }
+
+    /** Decode a photo Python's imaging library can't read (HEIC, AVIF) and write it as a JPEG. */
+    @JvmStatic
+    fun decodeImage(input: String, output: String): Boolean {
+        return try {
+            val bitmap = if (Build.VERSION.SDK_INT >= 28) {
+                android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(File(input))) { decoder, _, _ ->
+                    decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                }
+            } else {
+                android.graphics.BitmapFactory.decodeFile(input)
+            } ?: return false
+            FileOutputStream(output).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            bitmap.recycle()
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /** A JPEG preview frame of a video, at most [maxWidth] wide. */
+    @JvmStatic
+    fun videoThumb(input: String, output: String, maxWidth: Int): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(input)
+            val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0) ?: return false
+            val scale = min(1.0, maxWidth.toDouble() / frame.width)
+            val scaled = if (scale < 1) Bitmap.createScaledBitmap(frame, (frame.width * scale).roundToInt(), (frame.height * scale).roundToInt(), true) else frame
+            FileOutputStream(output).use { scaled.compress(Bitmap.CompressFormat.JPEG, 82, it) }
+            if (scaled !== frame) scaled.recycle()
+            frame.recycle()
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            retriever.release()
+        }
+    }
+
+    /** Draw one page of a PDF as a JPEG, [width] pixels wide. */
+    @JvmStatic
+    fun pdfRender(input: String, page: Int, width: Int, output: String): Boolean {
+        var fd: android.os.ParcelFileDescriptor? = null
+        var renderer: android.graphics.pdf.PdfRenderer? = null
+        var current: android.graphics.pdf.PdfRenderer.Page? = null
+        return try {
+            fd = android.os.ParcelFileDescriptor.open(File(input), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            renderer = android.graphics.pdf.PdfRenderer(fd!!)
+            if (page < 0 || page >= renderer.pageCount) return false
+            current = renderer.openPage(page)
+            val height = (width.toDouble() * current.height / current.width).roundToInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(android.graphics.Color.WHITE)
+            current.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            FileOutputStream(output).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+            bitmap.recycle()
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            try { current?.close() } catch (_: Throwable) {}
+            try { renderer?.close() } catch (_: Throwable) {}
+            try { fd?.close() } catch (_: Throwable) {}
+        }
+    }
+
+    @Volatile private var transformer: androidx.media3.transformer.Transformer? = null
+    @Volatile private var exportLatch: java.util.concurrent.CountDownLatch? = null
+    @Volatile private var exportProgress = 0
+    private val exportError = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
+
+    /**
+     * Re-encode a video to H.264/AAC at [height] pixels tall (as displayed) and [videoBitrate].
+     * Uses the phone's hardware encoder through Media3 Transformer. Blocks until done; throws on
+     * failure or cancel. [startMs]/[endMs] (endMs < 0: to the end) keep only part of the video.
+     */
+    @JvmStatic
+    fun transcode(input: String, output: String, height: Int, videoBitrate: Int, removeAudio: Boolean, startMs: Long, endMs: Long) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        exportLatch = latch
+        exportError.set(null)
+        exportProgress = 0
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        main.post {
+            try {
+                val item = androidx.media3.common.MediaItem.Builder().setUri(Uri.fromFile(File(input)))
+                if (startMs > 0 || endMs > 0) {
+                    val clip = androidx.media3.common.MediaItem.ClippingConfiguration.Builder().setStartPositionMs(maxOf(0L, startMs))
+                    if (endMs > 0) clip.setEndPositionMs(endMs)
+                    item.setClippingConfiguration(clip.build())
+                }
+                val edited = androidx.media3.transformer.EditedMediaItem.Builder(item.build())
+                    .setRemoveAudio(removeAudio)
+                    .setEffects(androidx.media3.transformer.Effects(
+                        listOf(), listOf(androidx.media3.effect.Presentation.createForHeight(height))))
+                    .build()
+                val encoders = androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
+                    .setRequestedVideoEncoderSettings(
+                        androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(videoBitrate).build())
+                    .setEnableFallback(true)
+                    .build()
+                val t = androidx.media3.transformer.Transformer.Builder(context)
+                    .setVideoMimeType(androidx.media3.common.MimeTypes.VIDEO_H264)
+                    .setAudioMimeType(androidx.media3.common.MimeTypes.AUDIO_AAC)
+                    .setEncoderFactory(encoders)
+                    .addListener(object : androidx.media3.transformer.Transformer.Listener {
+                        override fun onCompleted(
+                            composition: androidx.media3.transformer.Composition,
+                            exportResult: androidx.media3.transformer.ExportResult
+                        ) {
+                            transformer = null
+                            latch.countDown()
+                        }
+
+                        override fun onError(
+                            composition: androidx.media3.transformer.Composition,
+                            exportResult: androidx.media3.transformer.ExportResult,
+                            exportException: androidx.media3.transformer.ExportException
+                        ) {
+                            exportError.set(exportException)
+                            transformer = null
+                            latch.countDown()
+                        }
+                    })
+                    .build()
+                transformer = t
+                t.start(edited, output)
+                val holder = androidx.media3.transformer.ProgressHolder()
+                main.postDelayed(object : Runnable {
+                    override fun run() {
+                        val current = transformer ?: return
+                        if (current.getProgress(holder) == androidx.media3.transformer.Transformer.PROGRESS_STATE_AVAILABLE) {
+                            exportProgress = holder.progress
+                        }
+                        main.postDelayed(this, 500)
+                    }
+                }, 500)
+            } catch (e: Throwable) {
+                exportError.set(e)
+                latch.countDown()
+            }
+        }
+        latch.await()
+        exportLatch = null
+        exportError.get()?.let {
+            File(output).delete()
+            throw IOException(it.message ?: "Couldn't compress this video")
+        }
+        if (!File(output).exists() || File(output).length() == 0L) throw IOException("Couldn't compress this video")
+    }
+
+    /** 0 to 100 while [transcode] runs. */
+    @JvmStatic
+    fun transcodeProgress(): Int = exportProgress
+
+    @JvmStatic
+    fun cancelTranscode() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            transformer?.cancel()
+            transformer = null
+            exportError.set(IOException("Cancelled"))
+            exportLatch?.countDown()
+        }
+    }
+
     /** Copy the file into the gallery's WebSave album (audio: Music/WebSave) and return "uri|folder". */
     @JvmStatic
     fun save(path: String, name: String): String {
@@ -420,6 +610,7 @@ object Native {
         val ext = file.extension.lowercase()
         val isAudio = ext in AUDIO_EXTENSIONS
         val isImage = ext in setOf("gif", "jpg", "jpeg", "png", "webp")
+        val isDocument = ext == "pdf"
         val mime = when (ext) {
             "mp4" -> "video/mp4"
             "webm" -> "video/webm"
@@ -431,17 +622,23 @@ object Native {
             "jpg", "jpeg" -> "image/jpeg"
             "png" -> "image/png"
             "webp" -> "image/webp"
+            "pdf" -> "application/pdf"
             "opus", "ogg", "oga" -> "audio/ogg"
             else -> if (isAudio) "audio/*" else "video/*"
         }
         // videos, GIFs and covers share one "WebSave" album in the gallery
-        val root = if (isAudio) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_PICTURES
+        val root = when {
+            isAudio -> Environment.DIRECTORY_MUSIC
+            isDocument -> Environment.DIRECTORY_DOWNLOADS
+            else -> Environment.DIRECTORY_PICTURES
+        }
         val folder = "$root/WebSave"
 
         val uri: Uri
         if (Build.VERSION.SDK_INT >= 29) {
             val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
             val collection = when {
+                isDocument -> MediaStore.Downloads.getContentUri(volume)
                 isAudio -> MediaStore.Audio.Media.getContentUri(volume)
                 isImage -> MediaStore.Images.Media.getContentUri(volume)
                 else -> MediaStore.Video.Media.getContentUri(volume)
@@ -453,12 +650,12 @@ object Native {
                 put(MediaStore.MediaColumns.RELATIVE_PATH, folder)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
                 // dated "now" so it shows up at the top of the gallery, not on the upload date
-                put(MediaStore.MediaColumns.DATE_TAKEN, now)
+                if (!isDocument) put(MediaStore.MediaColumns.DATE_TAKEN, now)
                 put(MediaStore.MediaColumns.DATE_ADDED, now / 1000)
                 put(MediaStore.MediaColumns.DATE_MODIFIED, now / 1000)
             }
             // galleries hide videos without a duration, so fill it in instead of relying on the scan
-            val meta = if (!isAudio && !isImage) readVideoMeta(path) else null
+            val meta = if (!isAudio && !isImage && !isDocument) readVideoMeta(path) else null
             val resolver = context.contentResolver
             uri = resolver.insert(collection, values) ?: throw IOException("Couldn't create the file in the gallery")
             resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
@@ -480,7 +677,7 @@ object Native {
                 } catch (_: Exception) {}
             }
             // ask the scanner to (re)read the file so the gallery lists it right away
-            MediaScannerConnection.scanFile(context, arrayOf(uri.toString()), arrayOf(mime), null)
+            if (!isDocument) MediaScannerConnection.scanFile(context, arrayOf(uri.toString()), arrayOf(mime), null)
         } else {
             val dir = File(Environment.getExternalStoragePublicDirectory(root), "WebSave").apply { mkdirs() }
             var target = File(dir, name)

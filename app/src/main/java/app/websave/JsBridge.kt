@@ -97,6 +97,40 @@ class JsBridge(private val activity: Activity) {
         }
     }
 
+    /** Tools: pick photos, videos or PDFs; the page gets them through onFilesPicked(). */
+    @JavascriptInterface
+    fun pickFiles(accept: String, multiple: Boolean) = activity.runOnUiThread {
+        (activity as? MainActivity)?.pickFiles(accept, multiple)
+    }
+
+    /** Files shared to WebSave from another app, once copied (JSON), or "" while still copying. */
+    @JavascriptInterface
+    fun sharedFiles(): String = Staging.shared ?: ""
+
+    /** From the share sheet: open a tool in the full app with the shared files. */
+    @JavascriptInterface
+    fun openTool(tool: String, items: String) = activity.runOnUiThread {
+        activity.startActivity(
+            Intent(activity, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_TOOL, tool)
+                .putExtra(MainActivity.EXTRA_ITEMS, items)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        )
+        if (activity is QuickSaveActivity) activity.finish()
+    }
+
+    /** Send several saved files at once (a JSON array of content URIs). */
+    @JavascriptInterface
+    fun shareMany(urisJson: String, mime: String) = activity.runOnUiThread {
+        val array = org.json.JSONArray(urisJson)
+        val uris = ArrayList<Uri>((0 until array.length()).map { Uri.parse(array.getString(it)) })
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType(mime)
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        activity.startActivity(Intent.createChooser(send, "Send to"))
+    }
+
     /** Close the quick-save sheet (or send the full app to the background). */
     @JavascriptInterface
     fun close() = activity.runOnUiThread {

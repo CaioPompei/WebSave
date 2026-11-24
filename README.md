@@ -17,7 +17,14 @@ Save videos from YouTube, Instagram, TikTok, X and hundreds of other sites strai
 - **Smart queue**: 2 downloads at a time, automatic retries, optional "only on Wi-Fi"
 - **Self-updating engine**: yt-dlp updates itself once a week
 - Runs on Android 8 and up, 64-bit and 32-bit ARM, with a light mode for phones under 3 GB of RAM
-- Saves to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`)
+- Saves to the gallery's WebSave album (`Pictures/WebSave`, audio to `Music/WebSave`, PDFs to `Download/WebSave`)
+
+### Tools (files never leave the phone)
+
+- **Photos**: resize and compress, convert (JPG, WebP, PNG), see and remove the location and other hidden info (lossless for JPEG), photos to PDF
+- **PDF**: merge, split or extract pages, organize (reorder, rotate, delete), compress
+- **Video**: compress for WhatsApp or under a size limit (hardware encoder), trim, make a GIF, extract audio
+- Share photos, videos or PDFs to WebSave from the gallery or any app to open the right tool
 
 ## Build
 
@@ -31,6 +38,7 @@ GitHub Actions builds the APK on every push to `main`:
 
 ```
 pip install -U "yt-dlp[default]"
+pip install pillow pypdf   # for the tools
 python app/src/main/python/websave.py
 ```
 
@@ -43,6 +51,8 @@ runtime (Deno, Node.js or QuickJS) for full YouTube support.
 | --- | --- |
 | `app/src/main/python/websave.py` | Local server, yt-dlp logic, history |
 | `app/src/main/python/websave_ui.py` | The whole interface (one HTML page) |
+| `app/src/main/python/websave_tools.py` | Local tools: photos, PDFs and videos |
 | `app/src/main/java/app/websave/MainActivity.kt` | WebView host, share intent, Python startup |
-| `app/src/main/java/app/websave/Native.kt` | Audio/video muxing and saving to the gallery |
+| `app/src/main/java/app/websave/Native.kt` | Audio/video muxing and re-encoding, previews, saving to the gallery |
+| `app/src/main/java/app/websave/Staging.kt` | Copies picked or shared files into the app for the tools |
 | `app/src/main/java/app/websave/JsBridge.kt` | Clipboard, open and share for the page |

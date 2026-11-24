@@ -1,7 +1,7 @@
 """The WebSave interface: one self-contained page served by websave.py.
 
 The same page has two modes:
-- the full app (tabs Save / Library / Settings, video and playlist screens);
+- the full app (tabs Save / Library / Tools / Settings, video, playlist and tool screens);
 - ?mode=quick, a compact sheet shown over other apps when a link is shared to WebSave.
 """
 
@@ -252,15 +252,124 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
 .q-msg{display:flex;gap:12px;align-items:center;font-size:15px;line-height:1.45;color:var(--text-2);padding:8px 2px 16px}
 .q-msg svg{flex:none;width:24px;height:24px}
 
+/* ---------- tools ---------- */
+.trust{display:flex;align-items:center;gap:8px;margin:6px 0 0;font-size:13.5px;color:var(--text-2)}
+.trust svg{width:16px;height:16px;color:var(--success);flex:none}
+.tool-group{margin-top:26px}
+.tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tool-tile{display:flex;align-items:center;gap:12px;min-height:64px;padding:12px;border:0;border-radius:16px;background:var(--surface);
+  text-align:left;font-weight:600;font-size:14.5px;line-height:1.25;color:var(--text)}
+.tool-tile:active{background:var(--raised)}
+.tool-ico{width:38px;height:38px;border-radius:12px;background:var(--raised);color:var(--accent);display:grid;place-items:center;flex:none}
+.tool-ico svg{width:20px;height:20px}
+.tool-title{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.t-section{margin-top:22px}
+.t-label{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 2px 10px;font-size:13px;font-weight:600;color:var(--muted)}
+.t-label output,.t-label .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.t-label .link-btn{font-size:13.5px;padding:0}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 6px;-webkit-overflow-scrolling:touch}
+.tile{position:relative;flex:none;width:92px;height:92px;border-radius:14px;background:var(--raised);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:pan-x pan-y}
+.tile img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.tile .ph{position:absolute;top:0;left:0;right:0;bottom:0;display:grid;place-items:center;color:var(--muted)}
+.tile .ph svg{width:26px;height:26px}
+.tile .dur{right:6px;bottom:6px}
+.rm{position:absolute;top:5px;right:5px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(12,15,22,.8);color:#fff;
+  display:grid;place-items:center;padding:0;z-index:2}
+.rm::before{content:"";position:absolute;top:-9px;right:-9px;bottom:-9px;left:-9px}
+.rm svg{width:14px;height:14px}
+.tile.add{border:1.5px dashed var(--line);background:none;color:var(--text-2);display:grid;place-items:center;padding:0}
+.tile.add svg{width:26px;height:26px}
+.tile.loading{display:grid;place-items:center;color:var(--accent)}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;width:100%;min-height:200px;margin-top:6px;
+  border:1.5px dashed var(--line);border-radius:20px;background:none;color:var(--text);font-weight:600;font-size:16px}
+.drop svg{width:34px;height:34px;color:var(--accent)}
+.flist{background:var(--surface);border-radius:16px;overflow:hidden}
+.frow{display:flex;align-items:center;gap:12px;padding:10px 6px 10px 12px;border-top:1px solid var(--line-soft);background:var(--surface);
+  -webkit-user-select:none;user-select:none}
+.frow:first-child{border-top:0}
+.fthumb{position:relative;width:40px;height:52px;border-radius:6px;background:#EEF1F6;flex:none;overflow:hidden;display:grid;place-items:center;
+  color:#5B6475;font-size:10px;font-weight:800;letter-spacing:.04em}
+.fthumb img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.frow .txt{flex:1;min-width:0}
+.frow .txt b{display:block;font-size:14.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .txt span{display:block;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.frow .icon-btn{color:var(--muted)}
+.grip{touch-action:none;cursor:grab}
+.pages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.page{position:relative;aspect-ratio:3/4;border:2px solid transparent;border-radius:10px;background:#EEF1F6;padding:0;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.page .lines{position:absolute;top:14%;left:14%;right:14%;display:flex;flex-direction:column;gap:7px}
+.page .lines i{display:block;height:4px;border-radius:2px;background:#CDD3DE}
+.page .lines i:nth-child(3n+1){width:70%}
+.page img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#fff;transition:transform .2s;pointer-events:none}
+.page .num{position:absolute;left:6px;bottom:6px;min-width:22px;height:22px;border-radius:11px;background:rgba(12,15,22,.85);color:#fff;
+  font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 6px;font-variant-numeric:tabular-nums}
+.page .chk{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;border:2px solid #8F98AB;background:rgba(255,255,255,.9);
+  display:grid;place-items:center}
+.page .chk svg{width:14px;height:14px;color:var(--on-accent);opacity:0}
+.page[aria-pressed="true"]{border-color:var(--accent)}
+.page[aria-pressed="true"] .chk{background:var(--accent);border-color:var(--accent)}
+.page[aria-pressed="true"] .chk svg{opacity:1}
+.pages.plain .chk{display:none}
+.dragging{opacity:.9;transform:scale(1.05);box-shadow:0 10px 28px rgba(0,0,0,.5);z-index:3}
+.sel-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.sel-bar button{height:46px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);font-weight:600;font-size:14px;
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.sel-bar button svg{width:18px;height:18px}
+.sel-bar .danger{color:var(--danger)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}
+.seg button{min-height:52px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text-2);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:6px 4px;font-size:14px;font-weight:600}
+.seg button span{font-size:11.5px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.seg button[aria-checked="true"]{border-color:var(--accent);background:#2A2416;color:var(--text)}
+.slider{display:block;width:100%;accent-color:var(--accent);margin:0;height:32px}
+.t-card{background:var(--surface);border-radius:16px;padding:2px 16px}
+.t-card .switch-row{min-height:56px}
+.facts{background:var(--surface);border-radius:16px;overflow:hidden}
+.fact{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--line-soft)}
+.fact:first-child{border-top:0}
+.fact .set-ico{color:var(--text-2)}
+.fact.bad .set-ico{color:var(--danger)}
+.fact .txt{flex:1;min-width:0}
+.fact .txt span{display:block;font-size:12.5px;color:var(--muted)}
+.fact .txt b{display:block;font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.banner{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;font-size:14.5px;font-weight:600;line-height:1.4}
+.banner svg{width:22px;height:22px;flex:none}
+.banner.bad{background:var(--danger-bg);color:#FFB3AC}
+.banner.good{background:#1C2C25;color:var(--success)}
+.vprev{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:16/9}
+.vprev video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain}
+.filebar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;font-size:13.5px;color:var(--text-2)}
+.filebar span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:0 16px 14px 50px}
+.chips-row button{border:1px solid var(--line);border-radius:999px;padding:8px 0;font-size:14px;font-weight:600;background:none;color:var(--text-2)}
+.chips-row button[aria-checked="true"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.tool-bar{position:sticky;bottom:0;margin:22px -20px 0;padding:18px 20px calc(16px + var(--safe-b));background:linear-gradient(rgba(18,22,31,0),var(--bg) 22%);z-index:4}
+.est{display:flex;justify-content:center;gap:8px;align-items:baseline;font-size:13.5px;color:var(--text-2);margin:0 2px 10px;font-variant-numeric:tabular-nums}
+.est b{color:var(--text);font-weight:700}
+#tBody.busy{pointer-events:none;opacity:.55;transition:opacity .2s}
+.result{text-align:center;padding:30px 0 6px}
+.result .ok{width:68px;height:68px;border-radius:50%;background:#1C2C25;color:var(--success);display:grid;place-items:center;margin:0 auto 16px}
+.result .ok svg{width:32px;height:32px}
+.result .ok.bad{background:var(--danger-bg);color:var(--danger)}
+.result h2{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.result p{margin:6px 0 0;color:var(--text-2);font-size:14.5px;font-variant-numeric:tabular-nums}
+.result .gain{color:var(--success);font-weight:700}
+.q-acts{display:flex;flex-direction:column;gap:2px;margin:0 -8px}
+
 /* ---------- older WebViews (Android 8 to 10 without updates) ---------- */
 @supports not (aspect-ratio:1){
   .thumb,.hero{height:0;padding-top:62.5%}
 }
 .no-flexgap .head>*+*,.no-flexgap .link>*+*,.no-flexgap .clip-card>*+*,.no-flexgap .q-row>*+*,.no-flexgap .switch-row>*+*,
 .no-flexgap .search>*+*,.no-flexgap .error>*+*,.no-flexgap .done-text>*+*,.no-flexgap .as-item>*+*,.no-flexgap .pl-item>*+*,
-.no-flexgap .q-msg>*+*,.no-flexgap .big-btn>*+*,.no-flexgap .set-row>*+*,.no-flexgap .account-top>*+*,.no-flexgap .set-foot>*+*,.no-flexgap .pill-btn>*+*,.no-flexgap .cover-btn>*+*{margin-left:10px}
+.no-flexgap .q-msg>*+*,.no-flexgap .tool-tile>*+*,.no-flexgap .frow>*+*,.no-flexgap .banner>*+*,.no-flexgap .fact>*+*,.no-flexgap .trust>*+*,.no-flexgap .filebar>*+*,.no-flexgap .sel-bar button>*+*,.no-flexgap .big-btn>*+*,.no-flexgap .set-row>*+*,.no-flexgap .account-top>*+*,.no-flexgap .set-foot>*+*,.no-flexgap .pill-btn>*+*,.no-flexgap .cover-btn>*+*{margin-left:10px}
 .no-flexgap .chips>*,.no-flexgap .pills>*,.no-flexgap .row-btns>*,.no-flexgap .filters>*,.no-flexgap .v-meta>*{margin:0 8px 8px 0}
 .no-flexgap .nav button>*+*{margin-top:3px}
+.no-flexgap .strip>*{margin-right:10px}
+.no-flexgap .drop>*+*{margin-top:12px}
+.no-flexgap .chips-row>*{margin:0 8px 8px 0}
 .webview-hint{margin-top:16px;padding:13px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line);
   font-size:14px;line-height:1.45;color:var(--text-2)}
 .webview-hint b{color:var(--text)}
@@ -497,11 +606,33 @@ dialog::backdrop{background:rgba(5,7,12,.6)}
     <div class="pl-list" id="plList" role="group" aria-label="Items"></div>
     <div class="sticky-action"><button type="button" class="big-btn" id="plDownload"></button></div>
   </main>
+  <!-- ================= TOOLS ================= -->
+  <main class="screen" id="tab-tools" hidden>
+    <h1 class="page-title" style="margin-top:4px">Tools</h1>
+    <p class="trust"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>Files stay on this phone</p>
+    <section class="tool-group"><h2 class="set-label">Photos</h2><div class="tool-grid" id="tg-photos"></div></section>
+    <section class="tool-group"><h2 class="set-label">PDF</h2><div class="tool-grid" id="tg-pdf"></div></section>
+    <section class="tool-group"><h2 class="set-label">Video</h2><div class="tool-grid" id="tg-video"></div></section>
+  </main>
+
+  <!-- ================= ONE TOOL ================= -->
+  <main class="screen" id="view-tool" hidden>
+    <div class="bar-head">
+      <button class="icon-btn" id="tBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <h1 class="tool-title" id="tTitle"></h1>
+    </div>
+    <div id="tBody"></div>
+    <div class="error" id="tError" role="alert" hidden><span></span></div>
+    <div class="tool-bar" id="tBar"></div>
+    <input type="file" id="tFile" hidden>
+  </main>
+
 </div>
 
 <nav class="nav" id="nav" aria-label="Main">
   <button type="button" data-tab="save" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>Save</button>
   <button type="button" data-tab="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/></svg>Library</button>
+  <button type="button" data-tab="tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>Tools</button>
   <button type="button" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
 </nav>
 
@@ -596,7 +727,7 @@ function startedDownload(){
 }
 
 /* ---------- navigation ---------- */
-const VIEWS = ["tab-save","tab-library","tab-settings","view-video","view-playlist"];
+const VIEWS = ["tab-save","tab-library","tab-tools","tab-settings","view-video","view-playlist","view-tool"];
 function showOnly(id){ VIEWS.forEach(v => $("#" + v).hidden = v !== id); window.scrollTo(0,0); }
 function showTab(tab){
   state.tab = tab; state.view = "tabs";
@@ -1146,6 +1277,7 @@ function initQuick(){
   document.body.classList.add("quick");
   $("#app").hidden = true; $("#nav").hidden = true; $("#quick").hidden = false;
   $("#qScrim").onclick = closeQuick;
+  if(params.get("files")){ quickFiles(); return; }
   const link = params.get("url");
   if(link){ quickStart(link); return; }
   // opened from the Quick Settings tile or the icon shortcut: use the copied link
@@ -1175,10 +1307,601 @@ window.showWebViewHint = function(version){
   const b = $("#webviewUpdate"); if(b) b.onclick = () => native.openStore("com.google.android.webview");
 };
 
+/* ---------- tools: photos, PDFs and videos, processed on the phone ---------- */
+const SV = (d, extra="") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra}>${d}</svg>`;
+const TI = {
+  resize: SV('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'),
+  convert: SV('<path d="M17 2l4 4-4 4"/><path d="M3 12v-2a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 0 1-4 4H3"/>'),
+  privacy: SV('<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><path d="M4 4l16 16"/>'),
+  img2pdf: SV('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 17l2.5-3 2 2 1.5-2 1.5 3"/>'),
+  merge: SV('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>'),
+  split: SV('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M3 13h3M10 13h4M18 13h3"/>'),
+  organize: SV('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+  pdfcompress: SV('<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>'),
+  vcompress: SV('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M9 9.5l3 2.5 3-2.5M9 14.5l3-2.5 3 2.5"/>'),
+  trim: SV('<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/>'),
+  gif: SV('<path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5"/><path d="M20 4v4.5h-4.5"/><path d="M20 12a8 8 0 0 1-13.7 5.7L4 15.5"/><path d="M4 20v-4.5h4.5"/>'),
+  audio: SV('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
+};
+const ICO = {
+  plus: SV('<path d="M12 5v14M5 12h14"/>'),
+  x: SV('<path d="M6 6l12 12M18 6L6 18"/>', ' stroke-width="2.6"'),
+  grip: SV('<circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="18" r="1" fill="currentColor"/><circle cx="15" cy="18" r="1" fill="currentColor"/>'),
+  check: SV('<path d="m5 12.5 4.5 4.5L19 7.5"/>', ' stroke-width="3"'),
+  rotate: SV('<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>'),
+  trash: SV('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
+  pin: SV('<path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>'),
+  clock: SV('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  camera: SV('<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'),
+  app: SV('<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M11 18h2"/>'),
+  shield: SV('<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>'),
+  photo: SV('<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'),
+  video: SV('<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M10 9.5v5l4-2.5z"/>'),
+  pdf: SV('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+};
+const ONLY = {image:"Only photos work here.", pdf:"Only PDF files work here.", video:"Only videos work here."};
+const NOUN = {image:["photo","photos"], pdf:["PDF","PDFs"], video:["video","videos"]};
+const plural = (n, kind) => `${n} ${NOUN[kind][n === 1 ? 0 : 1]}`;
+const ACCEPT = {image:"image/*", pdf:"application/pdf", video:"video/*"};
+
+const TOOLS = {
+  resize:{group:"photos", title:"Resize", kind:"image", multi:true, files:"strip", estimate:true,
+    defaults:{size:"medium", quality:80, format:"jpg", strip:true},
+    options: () => {
+      const first = tool.items[0] && tool.items[0].meta || {};
+      const orig = Math.max(first.width || 0, first.height || 0);
+      return section("Size", seg("size", [["original","Original", orig ? orig + " px" : ""],["large","Large","2048 px"],["medium","Medium","1280 px"],["small","Small","800 px"]]))
+        + (tool.o.format === "png" ? "" : section("Quality", slider("quality", 40, 100, 5), `<output id="tQuality">${tool.o.quality}%</output>`))
+        + section("Format", formatSeg())
+        + `<div class="t-section t-card">${switchRow("strip", "Remove location")}</div>`;
+    },
+    label: () => `Save ${plural(tool.items.length, "image")}`},
+  convert:{group:"photos", title:"Convert", kind:"image", multi:true, files:"strip", estimate:true,
+    defaults:{format:"jpg"},
+    options: () => section("Convert to", formatSeg()),
+    label: () => `Convert ${plural(tool.items.length, "image")}`},
+  privacy:{group:"photos", title:"Remove location", kind:"image", multi:true, files:"strip",
+    defaults:{mode:"location"},
+    options: () => privacyFacts() + section("Remove", seg("mode", [["location","Location"],["all","Everything"]])),
+    ready: () => tool.o.mode === "all" || tool.items.some(i => i.meta && i.meta.location),
+    label: () => tool.o.mode === "all" ? "Remove all info" : tool.items.some(i => i.meta && i.meta.location) ? "Remove location" : "No location found"},
+  img2pdf:{group:"photos", title:"Photos to PDF", kind:"image", multi:true, files:"strip", sort:true,
+    defaults:{page:"fit"},
+    options: () => section("Page", seg("page", [["fit","Fit photo"],["a4","A4"]])),
+    label: () => tool.items.length > 1 ? `Create PDF · ${tool.items.length} pages` : "Create PDF"},
+  merge:{group:"pdf", title:"Merge PDFs", kind:"pdf", multi:true, files:"list", sort:true, defaults:{},
+    ready: () => tool.items.length > 1,
+    label: () => tool.items.length > 1 ? `Merge ${plural(tool.items.length, "pdf")}` : "Add another PDF"},
+  split:{group:"pdf", title:"Split PDF", kind:"pdf", multi:false, files:"pages", select:true,
+    defaults:{mode:"extract"},
+    options: () => section("Split", seg("mode", [["extract","Pick pages"],["each","Every page"]])),
+    ready: () => tool.o.mode === "each" ? tool.pages.length > 1 : tool.sel.size > 0,
+    label: () => tool.o.mode === "each" ? `Split into ${tool.pages.length} PDFs`
+      : tool.sel.size ? `Extract ${tool.sel.size} ${tool.sel.size === 1 ? "page" : "pages"}` : "Select pages"},
+  organize:{group:"pdf", title:"Organize pages", kind:"pdf", multi:false, files:"pages", select:true, sort:true, defaults:{},
+    ready: () => tool.pages.length > 0, label: () => "Save PDF"},
+  pdfcompress:{group:"pdf", title:"Compress PDF", kind:"pdf", multi:true, files:"list",
+    defaults:{level:"balanced"},
+    options: () => section("Level", seg("level", [["balanced","Balanced"],["smallest","Smallest"]])),
+    label: () => tool.items.length > 1 ? `Compress ${plural(tool.items.length, "pdf")}` : "Compress"},
+  vcompress:{group:"video", title:"Compress video", kind:"video", multi:true, files:"strip",
+    defaults:{preset:"whatsapp", limit_mb:16, mute:false, trim:false},
+    options: () => videoPresets() + `<div class="t-section t-card">${switchRow("mute", "Remove sound")}${tool.items.length === 1 ? switchRow("trim", "Trim") : ""}</div>`
+      + (tool.o.trim && tool.items.length === 1 ? rangeBlock() : ""),
+    label: () => tool.items.length > 1 ? `Compress ${plural(tool.items.length, "video")}` : "Compress"},
+  trim:{group:"video", title:"Trim", kind:"video", multi:false, files:"video", defaults:{},
+    options: () => rangeBlock(), ready: () => (tool.o.end - tool.o.start) >= 0.5, label: () => "Save clip"},
+  gif:{group:"video", title:"Make GIF", kind:"video", multi:false, files:"video", defaults:{width:480}, maxSpan:20,
+    options: () => rangeBlock() + section("Size", seg("width", [[320,"Small","320 px"],[480,"Medium","480 px"],[640,"Large","640 px"]])),
+    ready: () => (tool.o.end - tool.o.start) >= 0.5, label: () => "Create GIF"},
+  audio:{group:"video", title:"Extract audio", kind:"video", multi:true, files:"strip", defaults:{},
+    label: () => tool.items.length > 1 ? `Extract audio · ${plural(tool.items.length, "video")}` : "Extract audio"},
+};
+
+const tool = {id:null, def:null, items:[], o:{}, pages:[], sel:new Set(), job:null, timer:null, loading:false,
+  est:null, estSeq:0, estTimer:null, dragged:false, caps:{}};
+
+/* the grid on the Tools tab */
+function renderToolGrid(){
+  ["photos","pdf","video"].forEach(g => {
+    $("#tg-" + g).innerHTML = Object.entries(TOOLS).filter(([, d]) => d.group === g)
+      .map(([id, d]) => `<button type="button" class="tool-tile" data-tool="${id}"><span class="tool-ico">${TI[id]}</span><span>${esc(d.title)}</span></button>`).join("");
+  });
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest(".tool-tile"); if(t) openTool(t.dataset.tool);
+});
+
+async function openTool(id, ids){
+  const def = TOOLS[id]; if(!def) return;
+  clearTimeout(tool.timer); clearTimeout(tool.estTimer);
+  Object.assign(tool, {id, def, items:[], o:{...def.defaults}, pages:[], sel:new Set(), job:null, loading:false, est:null});
+  $("#tTitle").textContent = def.title;
+  $("#tError").hidden = true;
+  if(state.tab !== "tools") showTab("tools");
+  showView("view-tool");
+  if(ids && ids.length){
+    tool.loading = true; renderTool();
+    try{ addItems((await api("/api/tools/items?ids=" + encodeURIComponent(ids.join(",")))).items || []); }
+    catch(e){ tool.loading = false; renderTool(); toolError(e.message); }
+  } else {
+    renderTool();
+    pickFiles();
+  }
+}
+window.openTool = openTool;
+
+/* ---------- picking files ---------- */
+function pickFiles(){
+  const def = tool.def;
+  $("#tError").hidden = true;
+  if(native && native.pickFiles){ try{ native.pickFiles(ACCEPT[def.kind], !!def.multi); return; }catch(e){} }
+  const f = $("#tFile"); f.accept = ACCEPT[def.kind]; f.multiple = !!def.multi; f.value = ""; f.click();
+}
+window.onFilesStaging = function(){ tool.loading = true; renderTool(); };
+window.onFilesPicked = async function(files){
+  if(!files || !files.length){ tool.loading = false; renderTool(); return; }
+  try{ addItems((await postJSON("/api/tools/stage", {files})).items || []); }
+  catch(e){ tool.loading = false; renderTool(); toolError(e.message); }
+};
+$("#tFile").addEventListener("change", async e => {
+  const files = [...e.target.files]; if(!files.length) return;
+  tool.loading = true; renderTool();
+  const items = [];
+  for(const f of files){
+    try{ items.push((await api("/api/tools/upload", {method:"POST", headers:{"X-Name":encodeURIComponent(f.name)}, body:f})).item); }
+    catch(err){ toolError(err.message); }
+  }
+  addItems(items);
+});
+function addItems(items){
+  tool.loading = false;
+  const ok = items.filter(i => i && i.kind === tool.def.kind);
+  if(ok.length < items.length) toast(ONLY[tool.def.kind]);
+  if(ok.length){
+    tool.items = tool.def.multi ? tool.items.concat(ok) : ok.slice(0, 1);
+    tool.job = null;
+    itemsChanged();
+  } else renderTool();
+}
+function itemsChanged(){
+  const first = tool.items[0];
+  if(tool.def.files === "pages"){
+    const n = first && first.meta ? first.meta.pages || 0 : 0;
+    tool.pages = Array.from({length:n}, (_, p) => ({p, r:0}));
+    tool.sel = new Set();
+    if(first && first.meta && first.meta.error) toolError(first.meta.error);
+  }
+  if(first && first.kind === "video" && tool.items.length === 1){
+    const d = (first.meta && first.meta.duration) || 0;
+    tool.o.start = 0;
+    tool.o.end = Math.round(Math.min(d, tool.def.maxSpan || d) * 10) / 10;
+  }
+  renderTool();
+  scheduleEstimate();
+}
+
+/* ---------- small building blocks ---------- */
+function section(label, body, right=""){
+  return `<div class="t-section"><div class="t-label"><span>${esc(label)}</span>${right}</div>${body}</div>`;
+}
+function seg(key, options){
+  return `<div class="seg" role="radiogroup" aria-label="${esc(key)}">${options.map(([v, label, sub]) =>
+    `<button type="button" role="radio" data-opt="${key}" data-val="${v}" aria-checked="${String(tool.o[key]) === String(v)}">${esc(label)}${sub ? `<span>${esc(sub)}</span>` : ""}</button>`).join("")}</div>`;
+}
+function formatSeg(){
+  const f = [["jpg","JPG"]]; if(tool.caps.webp) f.push(["webp","WebP"]); f.push(["png","PNG"]);
+  return seg("format", f);
+}
+function slider(key, min, max, step){
+  return `<input type="range" class="slider" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${tool.o[key]}" aria-label="${esc(key)}">`;
+}
+function switchRow(key, label){
+  return `<label class="switch-row"><span class="txt"><b>${esc(label)}</b></span><input type="checkbox" class="switch" data-opt="${key}"${tool.o[key] ? " checked" : ""}></label>`;
+}
+function clock(s){
+  s = Math.max(0, s || 0);
+  const m = Math.floor(s / 60), x = s - m * 60;
+  return `${m}:${x < 10 ? "0" : ""}${x.toFixed(1)}`;
+}
+function itemThumb(item, w=200, page){
+  return `/api/tools/thumb/${item.id}?w=${w}${page != null ? "&p=" + page : ""}`;
+}
+function toolError(msg){ const b = $("#tError"); b.querySelector("span").textContent = msg; b.hidden = false; }
+
+/* ---------- files area ---------- */
+function filesHTML(){
+  const def = tool.def, items = tool.items;
+  const kind = def.kind;
+  if(!items.length && !tool.loading){
+    return `<button type="button" class="drop" data-add>${ICO.plus}<span>Choose ${def.multi ? NOUN[kind][1] : (kind === "image" ? "a photo" : kind === "pdf" ? "a PDF" : "a video")}</span></button>`;
+  }
+  const spinner = tool.loading ? `<div class="tile loading">${SPIN}</div>` : "";
+  if(def.files === "strip"){
+    const tiles = items.map((it, i) => `<div class="tile" data-i="${i}">
+        <span class="ph">${kind === "video" ? ICO.video : ICO.photo}</span>
+        <img src="${itemThumb(it)}" alt="" loading="lazy" onerror="this.remove()">
+        ${it.meta && it.meta.duration ? `<span class="dur">${duration(it.meta.duration)}</span>` : ""}
+        <button type="button" class="rm" data-rm="${i}" aria-label="Remove ${esc(it.name)}">${ICO.x}</button></div>`).join("");
+    const add = def.multi ? `<button type="button" class="tile add" data-add aria-label="Add">${ICO.plus}</button>` : "";
+    const right = def.sort && items.length > 1 ? `<span>Hold to move</span>` : "";
+    return section(plural(items.length, kind), `<div class="strip" data-sort="items">${tiles}${spinner}${add}</div>`, right);
+  }
+  if(def.files === "list"){
+    const rows = items.map((it, i) => `<div class="frow" data-i="${i}">
+        <span class="fthumb">PDF${tool.caps.pdf_pages ? `<img src="${itemThumb(it, 120, 0)}" alt="" loading="lazy" onerror="this.remove()">` : ""}</span>
+        <span class="txt"><b>${esc(it.name)}</b><span>${[it.meta && it.meta.pages ? `${it.meta.pages} ${it.meta.pages === 1 ? "page" : "pages"}` : "", bytes(it.size)].filter(Boolean).join(" · ")}</span></span>
+        ${def.sort && items.length > 1 ? `<button type="button" class="icon-btn grip" data-grip aria-label="Move ${esc(it.name)}">${ICO.grip}</button>` : ""}
+        <button type="button" class="icon-btn" data-rm="${i}" aria-label="Remove ${esc(it.name)}">${ICO.x}</button></div>`).join("");
+    const add = `<button type="button" class="link-btn" data-add>Add</button>`;
+    return section(plural(items.length, "pdf"), `<div class="flist" data-sort="items">${rows}</div>${tool.loading ? `<div style="padding:12px;text-align:center;color:var(--accent)">${SPIN}</div>` : ""}`, add);
+  }
+  if(def.files === "pages"){
+    const it = items[0];
+    if(!it) return section("PDF", `<div style="padding:30px;text-align:center;color:var(--accent)">${SPIN}</div>`);
+    const tiles = tool.pages.map((pg, i) => {
+      const odd = pg.r % 180 !== 0;
+      const img = tool.caps.pdf_pages ? `<img src="${itemThumb(it, 200, pg.p)}" alt="" loading="lazy" onerror="this.remove()" style="transform:rotate(${pg.r}deg)${odd ? " scale(.75)" : ""}">` : "";
+      return `<button type="button" class="page" data-i="${i}" aria-pressed="${tool.sel.has(pg)}" aria-label="Page ${pg.p + 1}">
+        <span class="lines"><i></i><i></i><i></i><i></i><i></i><i></i></span>${img}
+        <span class="num">${pg.p + 1}</span><span class="chk">${ICO.check}</span></button>`;
+    }).join("");
+    const head = `<div class="frow" style="border-radius:16px;margin-bottom:16px"><span class="fthumb">PDF</span>
+      <span class="txt"><b>${esc(it.name)}</b><span>${tool.pages.length} ${tool.pages.length === 1 ? "page" : "pages"} · ${bytes(it.size)}</span></span>
+      <button type="button" class="link-btn" data-add style="padding:0 10px">Change</button></div>`;
+    const plain = tool.id === "split" && tool.o.mode === "each";
+    let right = "";
+    if(!plain){
+      right = tool.sel.size ? `<button type="button" class="link-btn" data-act="none">Clear</button>`
+        : `<button type="button" class="link-btn" data-act="all">Select all</button>`;
+    }
+    const hint = tool.def.sort ? "Tap to select · hold to move" : plain ? "" : "Tap to select";
+    const bar = tool.id === "organize" && tool.sel.size ? `<div class="sel-bar">
+        <button type="button" data-act="rotl">${SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>')}Left</button>
+        <button type="button" data-act="rotr">${ICO.rotate}Right</button>
+        <button type="button" class="danger" data-act="delete">${ICO.trash}Delete</button></div>` : "";
+    return head + section(hint || " ", `<div class="pages${plain ? " plain" : ""}" data-sort="${tool.def.sort ? "pages" : ""}">${tiles}</div>${bar}`, right);
+  }
+  if(def.files === "video"){
+    const it = items[0];
+    if(!it) return section("Video", `<div style="padding:30px;text-align:center;color:var(--accent)">${SPIN}</div>`);
+    return `<div class="vprev"><video id="tVideo" src="/api/tools/file/${it.id}" playsinline controls preload="metadata"></video></div>
+      <div class="filebar"><span>${esc(it.name)}</span><button type="button" class="link-btn" data-add>Change</button></div>`;
+  }
+  return "";
+}
+
+function rangeBlock(){
+  const it = tool.items[0]; const d = (it && it.meta && it.meta.duration) || 0;
+  if(!d) return "";
+  const span = Math.max(0, tool.o.end - tool.o.start);
+  return section("Keep", `<div class="t-card" style="padding:10px 16px 12px">
+      <div class="range"><label for="tStart">Start</label><input type="range" id="tStart" data-range="start" min="0" max="${d}" step="0.1" value="${tool.o.start}"><output id="tStartOut">${clock(tool.o.start)}</output></div>
+      <div class="range"><label for="tEnd">End</label><input type="range" id="tEnd" data-range="end" min="0" max="${d}" step="0.1" value="${tool.o.end}"><output id="tEndOut">${clock(tool.o.end)}</output></div>
+    </div>`, `<output id="tSpan">${span.toFixed(1)} s</output>`);
+}
+
+/* photo info for "Remove location" */
+function niceDate(t){
+  const m = /^(\d{4}):(\d\d):(\d\d)[ T](\d\d):(\d\d)/.exec(t || "");
+  if(!m) return t;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  return d.toLocaleString([], {dateStyle:"medium", timeStyle:"short"});
+}
+function privacyFacts(){
+  const items = tool.items;
+  const withLoc = items.filter(i => i.meta && i.meta.location).length;
+  const banner = withLoc
+    ? `<div class="banner bad">${ICO.pin}<span>${items.length === 1 ? "This photo shows where it was taken" : `${withLoc} of ${items.length} photos show where they were taken`}</span></div>`
+    : `<div class="banner good">${ICO.shield}<span>${items.length === 1 ? "No location in this photo" : "No location in these photos"}</span></div>`;
+  if(items.length !== 1) return `<div class="t-section">${banner}</div>`;
+  const m = items[0].meta || {};
+  const rows = [];
+  if(m.location) rows.push(["bad", ICO.pin, "Location", m.location.join(", ")]);
+  if(m.taken) rows.push(["", ICO.clock, "Taken", niceDate(m.taken)]);
+  if(m.camera) rows.push(["", ICO.camera, "Camera", m.camera]);
+  if(m.software) rows.push(["", ICO.app, "Software", m.software]);
+  const facts = rows.length ? `<div class="facts" style="margin-top:12px">${rows.map(([c, ic, k, v]) =>
+    `<div class="fact ${c}"><span class="set-ico">${ic}</span><span class="txt"><span>${k}</span><b>${esc(v)}</b></span></div>`).join("")}</div>` : "";
+  return `<div class="t-section">${banner}${facts}</div>`;
+}
+
+/* video presets with their estimated size (same math as the server) */
+const VIDEO_PRESETS = {whatsapp:[720, 2200000], small:[480, 900000], hq:[1080, 5000000]};
+function videoPlan(meta, preset){
+  const w = meta.width || 1280, h = meta.height || 720;
+  const trimmed = tool.o.trim && tool.items.length === 1;
+  const dur = trimmed ? Math.max(0, tool.o.end - tool.o.start) : (meta.duration || 0);
+  const audio = tool.o.mute || meta.audio === false ? 0 : 128000;
+  let short, vbr;
+  if(preset === "limit"){
+    vbr = Math.max(250000, tool.o.limit_mb * 1e6 * 8 * 0.92 / Math.max(dur, 1) - audio);
+    short = vbr >= 4e6 ? 1080 : vbr >= 1.5e6 ? 720 : vbr >= 7e5 ? 480 : 360;
+  } else [short, vbr] = VIDEO_PRESETS[preset];
+  const src = Math.min(w, h) || short;
+  if(meta.bitrate) vbr = Math.min(vbr, Math.max(250000, meta.bitrate * 0.85));
+  return {short:Math.min(short, src), size:(vbr + audio) * dur / 8};
+}
+function videoPresets(){
+  const metas = tool.items.map(i => i.meta || {});
+  const est = p => metas.reduce((a, m) => a + videoPlan(m, p).size, 0);
+  const res = p => metas.length === 1 ? resLabel(videoPlan(metas[0], p).short) : (p === "small" ? "480p" : p === "hq" ? "1080p" : p === "whatsapp" ? "720p" : "");
+  const row = (p, label, tag) => `<button type="button" class="option" role="radio" data-opt="preset" data-val="${p}" aria-checked="${tool.o.preset === p}">
+      <span class="radio"><i></i></span><span class="lbl">${label}</span><span class="tag">${tag}</span><span class="size">≈ ${bytes(est(p)) || "–"}</span></button>`;
+  const chips = tool.o.preset === "limit" ? `<div class="chips-row" role="radiogroup" aria-label="Size limit">${[8, 16, 25, 50].map(mb =>
+    `<button type="button" role="radio" data-opt="limit_mb" data-val="${mb}" data-num aria-checked="${tool.o.limit_mb === mb}">${mb} MB</button>`).join("")}</div>` : "";
+  return section("Make it", `<div class="options" style="margin-top:0" role="radiogroup" aria-label="Target">
+      ${row("whatsapp", "For WhatsApp", res("whatsapp"))}${row("small", "Smallest", res("small"))}
+      ${row("limit", "Size limit", "")}${chips}${row("hq", "High quality", res("hq"))}</div>`);
+}
+
+/* ---------- rendering ---------- */
+function canRun(){
+  if(!tool.items.length || tool.loading) return false;
+  return tool.def.ready ? tool.def.ready() : true;
+}
+function renderTool(){
+  if(!tool.def) return;
+  const job = tool.job;
+  if(job && (job.status === "done" || job.status === "error")){
+    $("#tBody").innerHTML = resultHTML(job);
+  } else {
+    $("#tBody").innerHTML = filesHTML() + (tool.items.length && tool.def.options ? tool.def.options() : "");
+  }
+  paintBar();
+}
+function paintBar(){
+  const job = tool.job;
+  let html = "";
+  if(job && job.status === "working" || job && job.status === "saving"){
+    const pct = Math.floor(job.progress || 0);
+    html = `<div class="progress-row"><span>${job.status === "saving" ? "Saving" : "Working"}</span><span>${pct ? pct + "%" : ""}</span></div>
+      <div class="track"><i style="width:${Math.max(4, pct)}%"></i></div>
+      <button type="button" class="big-btn ghost" id="tCancel" style="margin-top:14px">Cancel</button>`;
+  } else if(job && job.status === "done"){
+    const many = job.outputs.length > 1;
+    html = native && job.outputs[0] && job.outputs[0].uri
+      ? `<div class="two"><button type="button" class="big-btn ghost" id="tOpen">Open</button><button type="button" class="big-btn" id="tShare">${many ? "Send all" : "Send to…"}</button></div>`
+      : `<button type="button" class="big-btn" id="tOpen">${many ? "Download all" : "Download"}</button>`;
+    html += `<button type="button" class="q-more" id="tAgain">Done</button>`;
+  } else if(job && job.status === "error"){
+    html = `<button type="button" class="big-btn" id="tRetry">Try again</button>`;
+  } else if(tool.items.length || tool.loading){
+    let est = "";
+    if(tool.def.estimate && tool.items.length){
+      const before = tool.items.reduce((a, i) => a + (i.size || 0), 0);
+      est = `<div class="est"><span>${bytes(before)}</span><span>${tool.est ? `→ <b>≈ ${bytes(tool.est.after)}</b>` : "→ …"}</span></div>`;
+    }
+    const ready = canRun();
+    const needsAdd = tool.id === "merge" && tool.items.length === 1;
+    html = est + `<button type="button" class="big-btn" id="tGo"${ready || needsAdd ? "" : " disabled"}>${esc(tool.items.length ? tool.def.label() : "Opening…")}</button>`;
+  }
+  $("#tBar").innerHTML = html;
+  $("#tBody").classList.toggle("busy", !!(job && (job.status === "working" || job.status === "saving")));
+}
+function resultHTML(job){
+  if(job.status === "error"){
+    return `<div class="result"><div class="ok bad">${SV('<path d="M12 7v6M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>', ' stroke-width="2.4"')}</div>
+      <h2>Didn't work</h2><p>${esc(job.error || "Something went wrong.")}</p></div>`;
+  }
+  const n = job.outputs.length;
+  const smaller = job.after && job.after < job.before * 0.97;
+  const pct = smaller ? Math.round((1 - job.after / job.before) * 100) : 0;
+  const where = job.outputs[0] && job.outputs[0].location;
+  const summary = smaller
+    ? `${bytes(job.before)} → ${bytes(job.after)} · <span class="gain">${pct}% smaller</span>`
+    : `${n} ${n === 1 ? "file" : "files"} · ${bytes(job.after)}`;
+  const list = n > 1 ? `<div class="flist" style="margin-top:20px">${job.outputs.slice(0, 6).map(o =>
+    `<div class="frow"><span class="txt"><b>${esc(o.name)}</b><span>${bytes(o.size)}</span></span></div>`).join("")}
+    ${n > 6 ? `<div class="frow"><span class="txt"><span>+ ${n - 6} more</span></span></div>` : ""}</div>` : "";
+  return `<div class="result"><div class="ok">${ICO.check}</div><h2>Saved</h2><p>${summary}</p>
+    ${job.note ? `<p>${esc(job.note)}</p>` : ""}${where && native ? `<p style="color:var(--muted);font-size:13px">${esc(where)}</p>` : ""}</div>${list}`;
+}
+
+/* ---------- interactions ---------- */
+const tBody = $("#tBody");
+tBody.addEventListener("click", e => {
+  if(tool.dragged) return;
+  const t = e.target;
+  if(t.closest("[data-add]")){ pickFiles(); return; }
+  const rm = t.closest("[data-rm]");
+  if(rm){ tool.items.splice(+rm.dataset.rm, 1); tool.job = null; itemsChanged(); return; }
+  const opt = t.closest("button[data-opt]");
+  if(opt){
+    const v = opt.dataset.val;
+    tool.o[opt.dataset.opt] = opt.hasAttribute("data-num") || /^\d+$/.test(v) ? +v : v;
+    renderTool(); scheduleEstimate(); return;
+  }
+  const page = t.closest(".page");
+  if(page && !(tool.id === "split" && tool.o.mode === "each")){
+    const pg = tool.pages[+page.dataset.i];
+    if(tool.sel.has(pg)) tool.sel.delete(pg); else tool.sel.add(pg);
+    renderTool(); return;
+  }
+  const act = t.closest("[data-act]");
+  if(act){
+    const a = act.dataset.act;
+    if(a === "all") tool.pages.forEach(p => tool.sel.add(p));
+    if(a === "none") tool.sel.clear();
+    if(a === "rotr" || a === "rotl") tool.sel.forEach(p => { p.r = (p.r + (a === "rotr" ? 90 : 270)) % 360; });
+    if(a === "delete"){ tool.pages = tool.pages.filter(p => !tool.sel.has(p)); tool.sel.clear(); }
+    renderTool();
+  }
+});
+tBody.addEventListener("input", e => {
+  const t = e.target;
+  if(t.matches(".slider[data-opt]")){
+    tool.o[t.dataset.opt] = +t.value;
+    const out = $("#tQuality"); if(out) out.textContent = t.value + "%";
+    scheduleEstimate();
+  }
+  if(t.matches("[data-range]")){
+    const d = +t.max, gap = 0.5, max = tool.def.maxSpan || Infinity;
+    let s = +$("#tStart").value, en = +$("#tEnd").value;
+    if(t.dataset.range === "start"){
+      if(s > d - gap) s = d - gap;
+      if(en < s + gap) en = Math.min(d, s + gap);
+      if(en - s > max) en = s + max;
+    } else {
+      if(en < gap) en = gap;
+      if(s > en - gap) s = Math.max(0, en - gap);
+      if(en - s > max) s = en - max;
+    }
+    tool.o.start = Math.round(s * 10) / 10; tool.o.end = Math.round(en * 10) / 10;
+    $("#tStart").value = tool.o.start; $("#tEnd").value = tool.o.end;
+    $("#tStartOut").textContent = clock(tool.o.start); $("#tEndOut").textContent = clock(tool.o.end);
+    $("#tSpan").textContent = (tool.o.end - tool.o.start).toFixed(1) + " s";
+    const v = $("#tVideo"); if(v){ try{ v.pause(); v.currentTime = t.dataset.range === "start" ? tool.o.start : tool.o.end; }catch(_){} }
+    if(tool.id === "vcompress"){ const box = document.querySelector('[aria-label="Target"]'); if(box) box.parentElement.outerHTML = videoPresets(); }
+    paintBar();
+  }
+});
+tBody.addEventListener("change", e => {
+  const t = e.target;
+  if(t.matches("input.switch[data-opt]")){ tool.o[t.dataset.opt] = t.checked; renderTool(); scheduleEstimate(); }
+});
+
+/* hold (or drag the handle) to reorder files and pages */
+const drag = {el:null, list:null, timer:null, x:0, y:0};
+tBody.addEventListener("pointerdown", e => {
+  const list = e.target.closest("[data-sort]"); if(!list || !list.dataset.sort) return;
+  const el = e.target.closest("[data-i]"); if(!el || el.parentElement !== list || e.button > 0) return;
+  if(e.target.closest("[data-rm]")) return;
+  drag.x = e.clientX; drag.y = e.clientY;
+  const start = () => {
+    drag.timer = null; drag.el = el; drag.list = list; tool.dragged = true;
+    el.classList.add("dragging");
+    try{ navigator.vibrate && navigator.vibrate(12); }catch(_){}
+  };
+  if(e.target.closest("[data-grip]")){ e.preventDefault(); start(); }
+  else drag.timer = setTimeout(start, 350);
+});
+window.addEventListener("pointermove", e => {
+  if(drag.timer && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8){ clearTimeout(drag.timer); drag.timer = null; }
+  if(!drag.el) return;
+  const over = document.elementFromPoint(e.clientX, e.clientY);
+  const target = over && over.closest("[data-i]");
+  if(target && target !== drag.el && target.parentElement === drag.list){
+    const all = [...drag.list.querySelectorAll(":scope > [data-i]")];
+    if(all.indexOf(target) > all.indexOf(drag.el)) target.after(drag.el); else target.before(drag.el);
+  }
+});
+function endDrag(){
+  clearTimeout(drag.timer); drag.timer = null;
+  if(!drag.el) return;
+  const order = [...drag.list.querySelectorAll(":scope > [data-i]")].map(x => +x.dataset.i);
+  const which = drag.list.dataset.sort;
+  drag.el.classList.remove("dragging"); drag.el = null; drag.list = null;
+  if(which === "items") tool.items = order.map(i => tool.items[i]);
+  else tool.pages = order.map(i => tool.pages[i]);
+  renderTool();
+  setTimeout(() => { tool.dragged = false; }, 60);
+}
+window.addEventListener("pointerup", endDrag);
+window.addEventListener("pointercancel", endDrag);
+tBody.addEventListener("touchmove", e => { if(drag.el) e.preventDefault(); }, {passive:false});
+tBody.addEventListener("contextmenu", e => { if(e.target.closest("[data-sort] [data-i]")) e.preventDefault(); });
+
+/* live size estimate for photos */
+function scheduleEstimate(){
+  if(!tool.def || !tool.def.estimate || !tool.items.length) return;
+  tool.est = null; paintBar();
+  clearTimeout(tool.estTimer);
+  const seq = ++tool.estSeq;
+  tool.estTimer = setTimeout(async () => {
+    try{
+      const r = await postJSON("/api/tools/estimate", {tool:tool.id, ids:tool.items.map(i => i.id), options:tool.o});
+      if(seq === tool.estSeq && !tool.job){ tool.est = r; paintBar(); }
+    }catch(e){}
+  }, 450);
+}
+
+/* ---------- running ---------- */
+function payload(){
+  const o = {...tool.o};
+  if(tool.id === "split") o.pages = tool.pages.filter(p => tool.sel.has(p)).map(p => p.p);
+  if(tool.id === "organize") o.pages = tool.pages.map(p => ({p:p.p, r:p.r}));
+  return o;
+}
+$("#tBar").addEventListener("click", async e => {
+  const id = e.target.closest("button") && e.target.closest("button").id;
+  if(id === "tGo"){
+    if(tool.id === "merge" && tool.items.length === 1){ pickFiles(); return; }
+    $("#tError").hidden = true;
+    const v = $("#tVideo"); if(v) try{ v.pause(); }catch(_){}
+    try{
+      const r = await postJSON("/api/tools/run", {tool:tool.id, ids:tool.items.map(i => i.id), options:payload()});
+      tool.job = {id:r.id, status:"working", progress:0};
+      paintBar(); pollTool();
+    }catch(err){ toolError(err.message); }
+  }
+  if(id === "tCancel"){ if(tool.job) await postJSON("/api/tools/cancel", {id:tool.job.id}).catch(()=>{}); }
+  if(id === "tRetry"){ tool.job = null; renderTool(); }
+  if(id === "tAgain"){ showTab("tools"); }
+  if(id === "tOpen"){
+    const outs = tool.job.outputs;
+    if(native && outs[0].uri) native.open(outs[0].uri, outs[0].mime);
+    else outs.forEach((o, i) => setTimeout(() => { location.href = "/api/tools/out/" + o.id; }, i * 400));
+  }
+  if(id === "tShare"){
+    const outs = tool.job.outputs;
+    if(outs.length > 1 && native.shareMany) native.shareMany(JSON.stringify(outs.map(o => o.uri)), outs[0].mime);
+    else native.share(outs[0].uri, outs[0].mime);
+  }
+});
+async function pollTool(){
+  clearTimeout(tool.timer);
+  const job = tool.job; if(!job) return;
+  let d;
+  try{ d = await api("/api/tools/job/" + job.id); }catch(e){ tool.timer = setTimeout(pollTool, 1000); return; }
+  if(tool.job !== job) return;
+  tool.job = d;
+  if(d.status === "cancelled"){ tool.job = null; renderTool(); return; }
+  if(d.status === "done" || d.status === "error"){ renderTool(); return; }
+  paintBar();
+  tool.timer = setTimeout(pollTool, 500);
+}
+$("#tBack").addEventListener("click", () => showTab("tools"));
+
+/* ---------- quick sheet: files shared from the gallery or another app ---------- */
+const QUICK_TOOLS = {image:["resize","privacy","img2pdf","convert"], pdf:["merge","pdfcompress","split","organize"],
+  video:["vcompress","trim","gif","audio"]};
+async function quickFiles(){
+  quickMessage(SPIN, "Opening…");
+  let files = null;
+  for(let i = 0; i < 100 && !files; i++){
+    let raw = ""; try{ raw = native.sharedFiles(); }catch(e){}
+    if(raw) files = JSON.parse(raw); else await new Promise(r => setTimeout(r, 250));
+  }
+  let items = [];
+  try{ if(files && files.length) items = (await postJSON("/api/tools/stage", {files})).items || []; }catch(e){}
+  const kinds = [...new Set(items.map(i => i.kind))].filter(k => QUICK_TOOLS[k]);
+  if(!items.length || kinds.length !== 1){
+    quickMessage(ICON_WARN, items.length ? "Share one kind of file at a time." : "Couldn't open these files.",
+      `<div class="q-grid"><button class="big-btn ghost" id="qClose">Close</button></div>`);
+    $("#qClose").onclick = closeQuick; return;
+  }
+  const kind = kinds[0], n = items.length;
+  const tools = QUICK_TOOLS[kind].filter(t => (t !== "merge" || n > 1) && (TOOLS[t].multi || n === 1));
+  const first = items[0];
+  const thumb = kind === "pdf" ? `<span class="fthumb" style="width:44px;height:56px">PDF</span>`
+    : `<span class="pl-thumb" style="width:56px;height:56px"><img src="${itemThumb(first, 160)}" alt="" onerror="this.remove()"></span>`;
+  const meta = kind === "pdf" && n === 1 && first.meta.pages ? `${first.meta.pages} pages · ${bytes(first.size)}`
+    : kind === "video" && n === 1 && first.meta.duration ? `${duration(first.meta.duration)} · ${bytes(first.size)}`
+    : bytes(items.reduce((a, i) => a + i.size, 0));
+  quickRender(`<div class="q-row">${thumb}<div><div class="t">${n === 1 ? esc(first.name) : plural(n, kind)}</div><div class="m">${esc(meta)}</div></div></div>
+    <div class="q-acts">${tools.map(t => `<button type="button" class="as-item" data-qt="${t}"><span class="tool-ico">${TI[t]}</span>${esc(TOOLS[t].title)}</button>`).join("")}</div>`);
+  $$("#qBody [data-qt]").forEach(b => b.onclick = () => native.openTool(b.dataset.qt, items.map(i => i.id).join(",")));
+}
+
 /* ---------- start ---------- */
+api("/api/tools/caps").then(c => { tool.caps = c; }).catch(() => {});
+renderToolGrid();
 if(QUICK){ initQuick(); }
 else{
   updateGo(); showTab("save");
+  const startTool = params.get("tool");
+  if(startTool){ history.replaceState(null, "", "/"); openTool(startTool, (params.get("items") || "").split(",").filter(Boolean)); }
   const initial = params.get("url");
   if(initial){ history.replaceState(null, "", "/"); receiveLink(initial); }
   setTimeout(checkClipboard, 600);

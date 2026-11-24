@@ -44,6 +44,9 @@ CFG = {
     "yt_export": None,                                # native (Android): write that session as cookies.txt
     "light": False,                                   # older / low-memory phone: do less at once
     "version": None,                                  # app version name (Android only)
+    # local tools (Android): see websave_tools.py
+    "decode": None, "probe": None, "video_thumb": None, "pdf_render": None,
+    "transcode": None, "transcode_progress": None, "transcode_cancel": None,
 }
 
 
@@ -578,7 +581,7 @@ def api_config():
     imported = os.path.isfile(os.path.join(CFG["data_dir"], "cookies.txt"))
     return {"app": CFG["app"], "cookies": imported, "youtube_signed_in": signed_in, "ffmpeg": HAS_FFMPEG,
             "engine": version, "js": has_js, "light": CFG["light"], "parallel": MAX_PARALLEL,
-            "version": CFG["version"],
+            "version": CFG["version"], "tools": tools.caps(),
             "settings": settings()}, 200
 
 
@@ -1009,6 +1012,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(api_jobs())
         elif path.startswith("/api/status/"):
             self._json(api_status(last))
+        elif path.startswith("/api/tools/"):
+            tools.handle_get(self, path)
         elif path.startswith("/api/file/"):
             file_path, filename, mime = _file_for(last)
             if not file_path or not os.path.isfile(file_path):
@@ -1043,6 +1048,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(api_thumbnail(self._json_body()))
         elif path == "/api/settings":
             self._json(api_set_settings(self._json_body()))
+        elif path.startswith("/api/tools/"):
+            tools.handle_post(self, path)
         else:
             self._json(({"error": "Not found."}, 404))
 
@@ -1088,7 +1095,16 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False, app_versi
                on_wifi=lambda: bool(native.isOnWifi()),
                audio=lambda src, base: native.extractAudio(src, base),
                yt_signed_in=lambda: bool(account.isSignedIn()),
-               yt_export=lambda path: bool(account.exportCookies(path)))
+               yt_export=lambda path: bool(account.exportCookies(path)),
+               decode=lambda src, out: bool(native.decodeImage(src, out)),
+               probe=lambda path: str(native.probe(path)),
+               video_thumb=lambda src, out, width: bool(native.videoThumb(src, out, width)),
+               pdf_render=lambda src, page, width, out: bool(native.pdfRender(src, page, width, out)),
+               transcode=lambda src, out, height, bitrate, mute, start, end:
+                   native.transcode(src, out, height, bitrate, mute, start, end),
+               transcode_progress=lambda: int(native.transcodeProgress()),
+               transcode_cancel=lambda: native.cancelTranscode())
+    threading.Thread(target=tools.cleanup_stage, daemon=True).start()
     threading.Thread(target=serve, args=(port,), daemon=True).start()
     threading.Thread(target=yt, daemon=True).start()  # warm up the engine
     threading.Thread(target=auto_update, daemon=True).start()
@@ -1098,6 +1114,8 @@ def start(port, data_dir, cache_dir, native_lib_dir=None, light=False, app_versi
 
 from websave_ui import HTML  # noqa: E402  (kept in its own module so the page is easy to edit)
 from websave_fonts import ONEST_WOFF2  # noqa: E402
+import websave_tools as tools  # noqa: E402
+tools.core = sys.modules[__name__]
 
 
 if __name__ == "__main__":
